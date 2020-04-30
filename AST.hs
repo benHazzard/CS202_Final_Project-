@@ -1,19 +1,19 @@
 module AST where
 
--- An R4 Program is a list of definitions and a "main" expression
-type R4Program = ([R4Definition], R4Expr)
-type TypedR4Program = ([TypedR4Definition], TypedR4Expr)
+-- An R5 Program is a list of definitions and a "main" expression
+type R5Program = ([R5Definition], R5Expr)
+type TypedR5Program = ([TypedR5Definition], TypedR5Expr)
 
--- Representation for R4 function definitions
+-- Representation for R5 function definitions
 -- Definitions have:
 --  - a name
 --  - a list of arguments (with name and type)
 --  - an output type
---  - an R4 expression for the body
-data R4Definition = Defn String [(String, Type)] Type R4Expr
+--  - an R5 expression for the body
+data R5Definition = Defn String [(String, Type)] Type R5Expr
   deriving (Eq, Ord, Show)
 
-data TypedR4Definition = DefnT String [(String, Type)] Type TypedR4Expr
+data TypedR5Definition = DefnT String [(String, Type)] Type TypedR5Expr
   deriving (Eq, Ord, Show)
 
 data Cmp = CmpEqual
@@ -23,25 +23,30 @@ data Cmp = CmpEqual
          | CmpLTE
   deriving (Eq, Ord, Show)
 
-data R4Expr = IntE Int
+data R5Expr = IntE Int
             | VarE String
-            | PlusE R4Expr R4Expr
-            | LetE String R4Expr R4Expr
+            | PlusE R5Expr R5Expr
+            | LetE String R5Expr R5Expr
             | TrueE
             | FalseE
-            | AndE R4Expr R4Expr
-            | OrE R4Expr R4Expr
-            | NotE R4Expr
-            | CmpE Cmp R4Expr R4Expr
-            | IfE R4Expr R4Expr R4Expr
+            | AndE R5Expr R5Expr
+            | OrE R5Expr R5Expr
+            | NotE R5Expr
+            | CmpE Cmp R5Expr R5Expr
+            | IfE R5Expr R5Expr R5Expr
             | VoidE
-            | VectorSetE R4Expr Int R4Expr
-            | VectorRefE R4Expr Int
-            | VectorE [R4Expr]
+            | VectorSetE R5Expr Int R5Expr
+            | VectorRefE R5Expr Int
+            | VectorE [R5Expr]
             | CollectE Int
             | AllocateE Int [String]
             | GlobalValE String
-            | FunCallE R4Expr [R4Expr]
+            | FunCallE R5Expr [R5Expr]
+            | LambdaE [(String, Type)] R5Expr
+            | NilE
+            | ConsE R5Expr R5Expr
+            | CarE R5Expr
+            | CdrE R5Expr
   deriving (Eq, Ord, Show)
 
 data Type = IntT
@@ -49,30 +54,33 @@ data Type = IntT
           | VectorT [Type]
           | VoidT
           | FunT [Type] Type
+          | ListT Type
+          | UnknownT
   deriving (Eq, Ord, Show)
 
-data TypedR4Expr = IntTE Int
+data TypedR5Expr = IntTE Int
                  | VarTE String Type
-                 | PlusTE TypedR4Expr TypedR4Expr
-                 | LetTE String TypedR4Expr TypedR4Expr
+                 | PlusTE TypedR5Expr TypedR5Expr
+                 | LetTE String TypedR5Expr TypedR5Expr
                  | TrueTE
                  | FalseTE
-                 | AndTE TypedR4Expr TypedR4Expr
-                 | OrTE TypedR4Expr TypedR4Expr
-                 | NotTE TypedR4Expr
-                 | CmpTE Cmp TypedR4Expr TypedR4Expr
-                 | IfTE TypedR4Expr TypedR4Expr TypedR4Expr Type
+                 | AndTE TypedR5Expr TypedR5Expr
+                 | OrTE TypedR5Expr TypedR5Expr
+                 | NotTE TypedR5Expr
+                 | CmpTE Cmp TypedR5Expr TypedR5Expr
+                 | IfTE TypedR5Expr TypedR5Expr TypedR5Expr Type
                  | VoidTE
-                 | VectorSetTE TypedR4Expr Int TypedR4Expr
-                 | VectorRefTE TypedR4Expr Int Type
-                 | VectorTE [TypedR4Expr] Type
+                 | VectorSetTE TypedR5Expr Int TypedR5Expr
+                 | VectorRefTE TypedR5Expr Int Type
+                 | VectorTE [TypedR5Expr] Type
                  | CollectTE Int
                  | AllocateTE Int Type
                  | GlobalValTE String
-                 | FunCallTE TypedR4Expr [TypedR4Expr] [Type] Type
+                 | FunCallTE TypedR5Expr [TypedR5Expr] [Type] Type
                  | FunRefTE String Type
+                 | LambdaTE [(String, Type)] Type TypedR5Expr
+                 | NilTE
+                 | ConsTE TypedR5Expr TypedR5Expr
+                 | CarTE TypedR5Expr
+                 | CdrTE TypedR5Expr
   deriving (Eq, Ord, Show)
-
-data List = Nil Empty
-          | Cons a (List a)
-    deriving (Eq, Ord, Show)

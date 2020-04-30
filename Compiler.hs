@@ -55,7 +55,83 @@ type TEnv = [(Variable, Type)]
 --  - a *typed* R5 expression
 -- Throws a run-time error if e is not well-typed
 tcExpr :: R5Expr -> TEnv -> (Type, TypedR5Expr)
-tcExpr e env = undefined
+tcExpr e env = case e of
+  VarE x ->
+    let t = fromJust (lookup x env)
+    in (t, VarTE x t)
+  IntE i -> (IntT, IntTE i)
+
+  TrueE -> (BoolT, TrueTE)
+  FalseE -> (BoolT, FalseTE)
+  
+  IfE e1 e2 e3 ->
+    case (tcExpr e1 env, tcExpr e2 env, tcExpr e3 env) of
+      ((BoolT, e1'), (t1, e2'), (t2, e3')) | t1 == t2 ->
+                                             (t1, IfTE e1' e2' e3' t1)
+      ((BoolT, _), (t1, _), (t2, _)) ->
+        error ("Type error in " ++ (show e) ++ ":\n branch 1 has type " ++ (show t1)
+               ++ " and branch 2 has type " ++ (show t2))
+      (tTest, _, _) ->
+        error ("Type error in " ++ (show e) ++ ":\n test has non-boolean type "
+               ++ (show tTest))
+
+  PlusE e1 e2 ->
+    case (tcExpr e1 env, tcExpr e2 env) of
+      ((IntT, e1'), (IntT, e2')) -> (IntT, PlusTE e1' e2')
+      _ -> error ("Type error in " ++ (show e))
+
+  CmpE CmpEqual e1 e2 ->
+    case (tcExpr e1 env, tcExpr e2 env) of
+      ((IntT, e1'), (IntT, e2')) -> (BoolT, CmpTE CmpEqual e1' e2')
+      ((BoolT, e1'), (BoolT, e2')) -> (BoolT, CmpTE CmpEqual e1' e2')
+      _ -> error ("Type error in " ++ (show e))
+
+  CmpE c e1 e2 ->
+    case (tcExpr e1 env, tcExpr e2 env) of
+      ((IntT, e1'), (IntT, e2')) -> (BoolT, CmpTE c e1' e2')
+      _ -> error ("Type error in " ++ (show e))
+
+  OrE e1 e2 ->
+    case (tcExpr e1 env, tcExpr e2 env) of
+      ((BoolT, e1'), (BoolT, e2')) -> (BoolT, OrTE e1' e2')
+      _ -> error ("Type error in " ++ (show e))
+
+  AndE e1 e2 ->
+    case (tcExpr e1 env, tcExpr e2 env) of
+      ((BoolT, e1'), (BoolT, e2')) -> (BoolT, AndTE e1' e2')
+      _ -> error ("Type error in " ++ (show e))
+
+  NotE e1 ->
+    case (tcExpr e1 env) of
+      (BoolT, e1') -> (BoolT, NotTE e1')
+      _ -> error ("Type error in " ++ (show e))
+
+  LetE x e1 e2 ->
+    let (t1, e1') = tcExpr e1 env
+        env'      = (x, t1) : env
+        (t2, e2') = tcExpr e2 env'
+    in (t2, LetTE x e1' e2')
+
+  VectorE args ->
+    let pairs = map (\e -> tcExpr e env) args
+        types = map fst pairs
+        args' = map snd pairs
+        t     = VectorT types
+    in (t, VectorTE args' t)
+
+  VectorRefE e1 idx ->
+    let (VectorT argTs, e1') = tcExpr e1 env
+        t = argTs !! idx
+    in (t, VectorRefTE e1' idx t)
+
+  VectorSetE e1 idx e2 ->
+    let (VectorT argTs, e1') = tcExpr e1 env
+        (t2, e2')            = tcExpr e2 env
+    in case (argTs !! idx == t2) of
+      True -> (VoidT, VectorSetTE e1' idx e2')
+      False -> error ("Type error in " ++ (show e))
+
+  VoidE -> (VoidT, VoidTE)
 
 -- Get the name and type of a definition
 getDefnType :: R5Definition -> (Variable, Type)
