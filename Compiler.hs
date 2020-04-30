@@ -132,6 +132,27 @@ tcExpr e env = case e of
       False -> error ("Type error in " ++ (show e))
 
   VoidE -> (VoidT, VoidTE)
+  FunCallE f args ->
+    let (FunT argTs outT, f') = tcExpr f env
+        argPs = map (\e -> tcExpr e env) args
+        argTs2 = map fst argPs
+        args' = map snd argPs
+        _ = map (\(t1, t2) -> case t1 == t2 of
+                    True -> ()
+                    False -> error $ "Mismatched argument types: " ++ (show (t1, t2)))
+               (zip argTs argTs2)
+    in (outT, FunCallTE f' args' argTs outT)
+    -- appending to a list
+  ConsE -> ConsTE
+
+  -- gets head of list 
+  CarE -> CarTE
+  
+  -- get tail of a list  
+  CdrE -> CdrE
+
+  -- empty lists
+  NilE -> NilTE 
 
 -- Get the name and type of a definition
 getDefnType :: R5Definition -> (Variable, Type)
@@ -166,7 +187,35 @@ typecheck (defns, e) =
 -- Output: an R5 expression
 -- Removes "and", "or", ">=", ">", ">="
 shrinkExpr :: TypedR5Expr -> TypedR5Expr
-shrinkExpr e = undefined
+shrinkExpr e = case e of
+  IntTE i -> IntTE i
+  VarTE x t -> VarTE x t
+  PlusTE e1 e2 -> PlusTE (shrinkExpr e1) (shrinkExpr e2)
+  LetTE x e1 e2 -> LetTE x (shrinkExpr e1) (shrinkExpr e2)
+  TrueTE -> TrueTE
+  FalseTE -> FalseTE
+  NotTE e1 -> NotTE (shrinkExpr e1)
+  IfTE e1 e2 e3 t -> IfTE (shrinkExpr e1) (shrinkExpr e2) (shrinkExpr e3) t
+  
+  AndTE e1 e2 -> IfTE (shrinkExpr e1) (shrinkExpr e2) FalseTE BoolT
+    
+  OrTE e1 e2 -> IfTE (shrinkExpr e1) TrueTE (shrinkExpr e2) BoolT
+  
+  CmpTE CmpLTE e1 e2 -> NotTE (CmpTE CmpLT (shrinkExpr e2) (shrinkExpr e1))
+  CmpTE CmpGT e1 e2 -> CmpTE CmpLT (shrinkExpr e2) (shrinkExpr e1)
+  CmpTE CmpGTE e1 e2 -> NotTE (CmpTE CmpLT (shrinkExpr e1) (shrinkExpr e2))
+  CmpTE c e1 e2 -> CmpTE c (shrinkExpr e1) (shrinkExpr e2)
+  VectorTE args t -> VectorTE (map shrinkExpr args) t
+  VectorRefTE e1 idx t -> VectorRefTE (shrinkExpr e1) idx t
+  VectorSetTE e1 idx e2 -> VectorSetTE (shrinkExpr e1) idx (shrinkExpr e2)
+  VoidTE -> VoidTE
+  FunCallTE e1 args argTs t -> FunCallTE (shrinkExpr e1) (map shrinkExpr args) argTs t
+
+
+
+
+
+
 
 -- The shrink pass, for an R5 definition
 -- Input:  an R5 definition
