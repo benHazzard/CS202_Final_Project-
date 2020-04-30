@@ -146,27 +146,42 @@ tcExpr e env = case e of
     --let ls = cons(1, cons(2, nil))
     --in car(cdr(ls))
 
+  -- think similar to additon
+  -- recurvely arguement first
+
   -- appending item to a list
-  ConsE i1 i2-> 
-      let type = fromJust (lookup i1 env)
-      in case type of 
-        IntT type -> (ListT BoolT, ConsTE l i)
-        BoolT type -> (ListT IntT, ConsTE l i)
+  ConsE i1 i2->  --list constructer
+      let (type1, ex1) = tcExpr i1 env -- fromJust (lookup i1 env)
+          (type2, ex2) = tcExpr i2 env
+      in case (type1, type2) of 
+        (IntT, ListT IntT) -> (ListT IntT, ConsTE ex1 ex2)
+        (BoolT, ListT BoolT) -> (ListT BoolT, ConsTE ex1 ex2)
+
+-- Type2 to be a listT of the same type of first arg
+
+
   -- gets head of list (first item of list)
   CarE l -> 
-    let type = fromJust (lookup (head l) env)
-    in case type of 
-        TrueE -> (BoolT, TrueTE)
-        FalseE -> (BoolT, FalseTE)
-        InT i -> (IntT, IntTE i)
+    let (typeL, exL) = tcExpr l env --fromJust (lookup (head l) env)
+    in case typeL of --Hope its a listT
+        ListT t -> (t, CarTE exL)
+        _ -> error $ "Not a ListT, so not from a list. "
+--        TrueE -> (BoolT, TrueTE)
+  --      FalseE -> (BoolT, FalseTE)
+    --    InT i -> (IntT, IntTE i)
   -- get tail of a list  (gets all other items)
-  CdrE l -> 
-     let type = fromJust (lookup i1 env)
-      in case type of 
-        IntT i -> (ListT IntT, CdrTE l)
-        BoolT i -> (ListT BoolT, CdrTE l)
+  CdrE l ->  --almost same as CarE, takes list and return list
+     let (typeL, exL) = tcExpr l env -- fromJust (lookup i1 env)
+      in case typel of 
+        ListT i -> (ListT i, CdrTE exL)
+        _ -> error $"NOt a list, so not needed" --so just 1 is error,
+        --BoolT i -> (ListT BoolT, CdrTE l)
+
   -- empty list
-  NilE -> (VoidT, NilTE) 
+  NilE -> (ListT u, NilTE) --still needs to give a list Type, and be able to match with any list
+-- What type of Nil, like NillInt or NillBool
+-- Change to NilE -> NilE Type
+--think  cons(1, nil[Int])
 
 -- Get the name and type of a definition
 getDefnType :: R5Definition -> (Variable, Type)
@@ -1181,7 +1196,9 @@ printX86Arg e = case e of
 
 -- The printX86 pass for x86 instructions
 printX86Instr :: (Int, Int) -> Label -> X86Instr -> String
-printX86Instr (stackSpills, rootStackSpills) name e = undefined
+printX86Instr (stackSpills, rootStackSpills) name e = undefined 
+
+
 
 -- The printX86 pass for a single block
 -- Input:
