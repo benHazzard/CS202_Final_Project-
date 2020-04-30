@@ -142,17 +142,31 @@ tcExpr e env = case e of
                     False -> error $ "Mismatched argument types: " ++ (show (t1, t2)))
                (zip argTs argTs2)
     in (outT, FunCallTE f' args' argTs outT)
-    -- appending to a list
-  ConsE -> ConsTE
+   
+    --let ls = cons(1, cons(2, nil))
+    --in car(cdr(ls))
 
-  -- gets head of list 
-  CarE -> CarTE
-  
-  -- get tail of a list  
-  CdrE -> CdrE
-
-  -- empty lists
-  NilE -> NilTE 
+  -- appending item to a list
+  ConsE i1 i2-> 
+      let type = fromJust (lookup i1 env)
+      in case type of 
+        IntT type -> (ListT BoolT, ConsTE l i)
+        BoolT type -> (ListT IntT, ConsTE l i)
+  -- gets head of list (first item of list)
+  CarE l -> 
+    let type = fromJust (lookup (head l) env)
+    in case type of 
+        TrueE -> (BoolT, TrueTE)
+        FalseE -> (BoolT, FalseTE)
+        InT i -> (IntT, IntTE i)
+  -- get tail of a list  (gets all other items)
+  CdrE l -> 
+     let type = fromJust (lookup i1 env)
+      in case type of 
+        IntT i -> (ListT IntT, CdrTE l)
+        BoolT i -> (ListT BoolT, CdrTE l)
+  -- empty list
+  NilE -> (VoidT, NilTE) 
 
 -- Get the name and type of a definition
 getDefnType :: R5Definition -> (Variable, Type)
@@ -187,34 +201,32 @@ typecheck (defns, e) =
 -- Output: an R5 expression
 -- Removes "and", "or", ">=", ">", ">="
 shrinkExpr :: TypedR5Expr -> TypedR5Expr
-shrinkExpr e = case e of
-  IntTE i -> IntTE i
-  VarTE x t -> VarTE x t
-  PlusTE e1 e2 -> PlusTE (shrinkExpr e1) (shrinkExpr e2)
-  LetTE x e1 e2 -> LetTE x (shrinkExpr e1) (shrinkExpr e2)
-  TrueTE -> TrueTE
-  FalseTE -> FalseTE
-  NotTE e1 -> NotTE (shrinkExpr e1)
-  IfTE e1 e2 e3 t -> IfTE (shrinkExpr e1) (shrinkExpr e2) (shrinkExpr e3) t
-  
-  AndTE e1 e2 -> IfTE (shrinkExpr e1) (shrinkExpr e2) FalseTE BoolT
-    
-  OrTE e1 e2 -> IfTE (shrinkExpr e1) TrueTE (shrinkExpr e2) BoolT
-  
-  CmpTE CmpLTE e1 e2 -> NotTE (CmpTE CmpLT (shrinkExpr e2) (shrinkExpr e1))
-  CmpTE CmpGT e1 e2 -> CmpTE CmpLT (shrinkExpr e2) (shrinkExpr e1)
-  CmpTE CmpGTE e1 e2 -> NotTE (CmpTE CmpLT (shrinkExpr e1) (shrinkExpr e2))
-  CmpTE c e1 e2 -> CmpTE c (shrinkExpr e1) (shrinkExpr e2)
-  VectorTE args t -> VectorTE (map shrinkExpr args) t
-  VectorRefTE e1 idx t -> VectorRefTE (shrinkExpr e1) idx t
-  VectorSetTE e1 idx e2 -> VectorSetTE (shrinkExpr e1) idx (shrinkExpr e2)
-  VoidTE -> VoidTE
-  FunCallTE e1 args argTs t -> FunCallTE (shrinkExpr e1) (map shrinkExpr args) argTs t
+shrinkExpr e = undefined
+  -- case e of
+  -- IntTE i -> IntTE i
+  -- VarTE x t -> VarTE x t
+  -- PlusTE e1 e2 -> PlusTE (shrinkExpr e1) (shrinkExpr e2)
+  -- LetTE x e1 e2 -> LetTE x (shrinkExpr e1) (shrinkExpr e2)
+  -- TrueTE -> TrueTE
+  -- FalseTE -> FalseTE
+  -- NotTE e1 -> NotTE (shrinkExpr e1)
+  -- IfTE e1 e2 e3 t -> IfTE (shrinkExpr e1) (shrinkExpr e2) (shrinkExpr e3) t
+  -- AndTE e1 e2 -> IfTE (shrinkExpr e1) (shrinkExpr e2) FalseTE BoolT
+  -- OrTE e1 e2 -> IfTE (shrinkExpr e1) TrueTE (shrinkExpr e2) BoolT
+  -- CmpTE CmpLTE e1 e2 -> NotTE (CmpTE CmpLT (shrinkExpr e2) (shrinkExpr e1))
+  -- CmpTE CmpGT e1 e2 -> CmpTE CmpLT (shrinkExpr e2) (shrinkExpr e1)
+  -- CmpTE CmpGTE e1 e2 -> NotTE (CmpTE CmpLT (shrinkExpr e1) (shrinkExpr e2))
+  -- CmpTE c e1 e2 -> CmpTE c (shrinkExpr e1) (shrinkExpr e2)
+  -- VectorTE args t -> VectorTE (map shrinkExpr args) t
+  -- VectorRefTE e1 idx t -> VectorRefTE (shrinkExpr e1) idx t
+  -- VectorSetTE e1 idx e2 -> VectorSetTE (shrinkExpr e1) idx (shrinkExpr e2)
+  -- VoidTE -> VoidTE
+  -- FunCallTE e1 args argTs t -> FunCallTE (shrinkExpr e1) (map shrinkExpr args) argTs t
 
-
-
-
-
+  -- ConsTE i1 i2 -> ConsTE (shrinkExpr i1) (shrinkExpr i2)
+  -- CdrTE t-> CdrTE t
+  -- CarTE h -> CarTE h
+  -- NilTE -> NilTE
 
 
 -- The shrink pass, for an R5 definition
@@ -248,7 +260,36 @@ type VEnv = [(Variable, Variable)]
 --   - a variable environment
 -- Output: an R5 expression, with variables renamed to be unique
 uniquifyExp :: TypedR5Expr -> VEnv -> TypedR5Expr
-uniquifyExp e env = undefined
+uniquifyExp e env = 
+  -- case e of
+  -- IntTE _ -> e
+  -- VarTE x t -> case lookup x env of
+  --   Just x' -> VarTE x' t
+  --   Nothing -> error $ "Failed to find variable " ++ (show x) ++ " in environment " ++ (show env)
+  -- PlusTE e1 e2 ->
+  --   PlusTE (uniquifyExp e1 env) (uniquifyExp e2 env)
+  -- LetTE x e1 e2 ->
+  --   let newV = gensym x
+  --       newEnv = (x, newV) : env
+  --   in LetTE newV (uniquifyExp e1 newEnv) (uniquifyExp e2 newEnv)
+  -- TrueTE -> TrueTE
+  -- FalseTE -> FalseTE
+  -- NotTE e1 -> NotTE (uniquifyExp e1 env)
+  -- CmpTE c e1 e2 -> CmpTE c (uniquifyExp e1 env) (uniquifyExp e2 env)
+  -- IfTE e1 e2 e3 t -> IfTE (uniquifyExp e1 env) (uniquifyExp e2 env) (uniquifyExp e3 env) t
+  -- VectorTE args t -> VectorTE (map (\e -> uniquifyExp e env) args) t
+  -- VectorRefTE e1 idx t -> VectorRefTE (uniquifyExp e1 env) idx t
+  -- VectorSetTE e1 idx e2 -> VectorSetTE (uniquifyExp e1 env) idx (uniquifyExp e2 env)
+  -- VoidTE -> VoidTE
+  -- FunCallTE e1 args argTs t ->
+  --   FunCallTE (uniquifyExp e1 env) (map (\e -> uniquifyExp e env) args) argTs t
+  
+  -- ConsTE i1 i2 -> ConsTE (uniquifyExp i1 env) (uniquifyExp i2 env)
+  -- CarTE h -> CarTE h
+  -- CdrTE t -> CdrTE (uniquifyExp t env)
+  -- NilTE -> NilTE
+
+
 
 -- The uniquify pass, for a single R5 definition
 -- Input:  an R5 definition
