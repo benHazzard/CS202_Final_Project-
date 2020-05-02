@@ -360,9 +360,9 @@ revealExpr e funs = case e of
     FunCallTE (revealExpr e1 funs) (map (\a -> revealExpr a funs) args) argTs t
 
   -- List Exprs
-  -- ConsTE i1 i2 -> ConsTE (shrinkExpr i1) (shrinkExpr i2)
-  -- CdrTE t-> CdrTE shrink(t)
-  -- CarTE h -> CarTE shrink(h)
+  ConsTE i1 i2 -> ConsTE (revealExpr i1 funs) (revealExpr i2 funs)
+  CdrTE t-> CdrTE (revealExpr t funs)
+  CarTE h -> CarTE (revealExpr h funs)
   NilTE ty-> NilTE ty
 
 -- Reveal-functions, for R5 expressions
@@ -398,7 +398,34 @@ type EEnv = [(Variable, TypedR5Expr)]
 -- Output: an R5 expression
 -- Moves arguments > 6 into a vector
 limitExpr :: TypedR5Expr -> EEnv -> TypedR5Expr
-limitExpr e env = undefined
+limitExpr e env = case e of 
+  IntTE i -> IntTE i
+  VarTE x t -> case lookup x envs of
+    Nothing  -> VarTE x t
+    Just e' -> e'
+  PlusTE e1 e2 -> PlusTE (limitExpr e1 env) (limitExpr e2 env)
+  LetTE x e1 e2 -> LetTE x (limitExpr e1 env) (limitExpr e2 env)
+  TrueTE -> TrueTE
+  FalseTE -> FalseTE
+  NotTE e1 -> NotTE (limitExpr e1 env)
+  IfTE e1 e2 e3 t -> IfTE (limitExpr e1 env) (limitExpr e2 env) (limitExpr e3 env) t
+  AndTE e1 e2 -> IfTE (limitExpr e1 env) (limitExpr e2 env) FalseTE BoolT
+  OrTE e1 e2 -> IfTE (limitExpr e1 env) TrueTE (limitExpr e2 env) BoolT
+
+  CmpTE CmpLTE e1 e2 -> NotTE (CmpTE CmpLT (revealExpr e2 funs) (revealExpr e1 funs))
+  CmpTE CmpGT e1 e2 -> CmpTE CmpLT (revealExpr e2 funs) (revealExpr e1 funs)
+  CmpTE CmpGTE e1 e2 -> NotTE (CmpTE CmpLT (revealExpr e1 funs) (revealExpr e2 funs))
+  CmpTE c e1 e2 -> CmpTE c (revealExpr e1 funs) (revealExpr e2 funs)
+
+  VectorTE args t -> VectorTE (map (\a -> revealExpr a funs) args) t
+  VectorRefTE e1 idx t -> VectorRefTE (revealExpr e1 funs) idx t
+  VectorSetTE e1 idx e2 -> VectorSetTE (revealExpr e1 funs) idx (revealExpr e2 funs)
+  VoidTE -> VoidTE
+
+  ConsTE i1 i2 -> ConsTE (limitExpr i1 env) (limitExpr i2 env)
+  CdrTE t-> CdrTE (limitExpr t env)
+  CarTE h -> CarTE (limitExpr h env)
+  NilTE ty-> NilTE ty
 
 -- Limit-functions, for an R5 definition
 -- Input: an R5 definition
@@ -441,7 +468,13 @@ mkLet ((x, e) : bs) body = LetTE x e (mkLet bs body)
 -- Output: an R5 expression, without "VectorTE" expressions
 -- This pass compiles "VectorTE" expressions into explicit allocations
 eaExp :: TypedR5Expr -> TypedR5Expr
-eaExp e = undefined
+eaExp e = case e of 
+  
+
+  ConsTE i1 i2 -> ConsTE (eaExp i1) (eaExp i2)
+  CdrTE t-> CdrTE (eaExp t)
+  CarTE h -> CarTE (eaExpr h)
+  NilTE ty-> NilTE ty
 
 -- Expose allocation, for an R5 definition
 -- Input: an R5 definition
@@ -464,7 +497,13 @@ exposeAllocation defns = map eaDefn defns
 -- input:  COMPLEX EXPRESSION
 -- output: COMPLEX EXPRESSION in A-Normal Form
 rcoExp :: TypedR5Expr -> TypedR5Expr
-rcoExp e = undefined
+rcoExp e = case e of 
+
+  ConsTE i1 i2 -> ConsTE (rcoExp i1) (rcoExp i2)
+  CdrTE t-> CdrTE (rcoExp t)
+  CarTE h -> CarTE (rcoExpr h)
+  NilTE ty-> NilTE ty
+ 
 
 -- The remove-complex-operand pass on an expression in ARGUMENT POSITION
 -- input:  COMPLEX EXPRESSION
