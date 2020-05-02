@@ -297,13 +297,11 @@ uniquifyExp e env =
   -- VectorSetTE e1 idx e2 -> VectorSetTE (uniquifyExp e1 env) idx (uniquifyExp e2 env)
   -- VoidTE -> VoidTE
   -- FunCallTE e1 args argTs t ->
-  --   FunCallTE (uniquifyExp e1 env) (map (\e -> uniquifyExp e env) args) argTs t
-  
+  --   FunCallTE (uniquifyExp e1 env) (map (\e -> uniquifyExp e env) args) argTs t 
   -- ConsTE i1 i2 -> ConsTE (uniquifyExp i1 env) (uniquifyExp i2 env)
   -- CarTE h -> CarTE (uniquifyExp h env)
   -- CdrTE t -> CdrTE (uniquifyExp t env)
   -- NilTE ty -> NilTE ty
-
 
 
 -- The uniquify pass, for a single R5 definition
@@ -335,7 +333,37 @@ uniquify defns =
 -- Output: an R5 expression
 -- Transforms variables referencing function names with FunRefTE expressions
 revealExpr :: TypedR5Expr -> [String] -> TypedR5Expr
-revealExpr e funs = undefined
+revealExpr e funs = case e of
+  IntTE i -> IntTE i
+  VarTE x t -> case elem x funs of
+    True -> FunRefTE x t
+    False -> e
+  PlusTE e1 e2 -> PlusTE (revealExpr e1 funs) (revealExpr e2 funs)
+  LetTE x e1 e2 -> LetTE x (revealExpr e1 funs) (revealExpr e2 funs)
+  TrueTE -> TrueTE
+  FalseTE -> FalseTE
+  NotTE e1 -> NotTE (revealExpr e1 funs)
+  IfTE e1 e2 e3 t -> IfTE (revealExpr e1 funs) (revealExpr e2 funs) (revealExpr e3 funs) t
+  AndTE e1 e2 -> IfTE (revealExpr e1 funs) (revealExpr e2 funs) FalseTE BoolT
+  OrTE e1 e2 -> IfTE (revealExpr e1 funs) TrueTE (revealExpr e2 funs) BoolT
+
+  CmpTE CmpLTE e1 e2 -> NotTE (CmpTE CmpLT (revealExpr e2 funs) (revealExpr e1 funs))
+  CmpTE CmpGT e1 e2 -> CmpTE CmpLT (revealExpr e2 funs) (revealExpr e1 funs)
+  CmpTE CmpGTE e1 e2 -> NotTE (CmpTE CmpLT (revealExpr e1 funs) (revealExpr e2 funs))
+  CmpTE c e1 e2 -> CmpTE c (revealExpr e1 funs) (revealExpr e2 funs)
+
+  VectorTE args t -> VectorTE (map (\a -> revealExpr a funs) args) t
+  VectorRefTE e1 idx t -> VectorRefTE (revealExpr e1 funs) idx t
+  VectorSetTE e1 idx e2 -> VectorSetTE (revealExpr e1 funs) idx (revealExpr e2 funs)
+  VoidTE -> VoidTE
+  FunCallTE e1 args argTs t -> 
+    FunCallTE (revealExpr e1 funs) (map (\a -> revealExpr a funs) args) argTs t
+
+  -- List Exprs
+  -- ConsTE i1 i2 -> ConsTE (shrinkExpr i1) (shrinkExpr i2)
+  -- CdrTE t-> CdrTE shrink(t)
+  -- CarTE h -> CarTE shrink(h)
+  NilTE ty-> NilTE ty
 
 -- Reveal-functions, for R5 expressions
 -- Input: e, an R5 expression
