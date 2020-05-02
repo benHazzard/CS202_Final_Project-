@@ -151,14 +151,14 @@ tcExpr e env = case e of
 
   -- appending item to a list
   ConsE i1 i2->  --list constructer
-      let (type1, ex1) = tcExpr i1 env -- fromJust (lookup i1 env)
+      let (type1, ex1) = tcExpr i1 env 
           (type2, ex2) = tcExpr i2 env
-      in case (type1, type2) of 
-        (IntT, ListT IntT) -> (ListT IntT, ConsTE ex1 ex2)
-        (BoolT, ListT BoolT) -> (ListT BoolT, ConsTE ex1 ex2)
-
--- Type2 to be a listT of the same type of first arg
-
+      in case (type2) of 
+        ListT tyL -> case (type1 == tyL) of 
+          True -> (ListT tyl, ConsTE ex1 ex2)
+          False -> error $ "1st arg type mismatch 2nd list type"
+        _ -> error $ "There is no list Type to match with"
+        -- Type2 to be a listT of the same type of first arg
 
   -- gets head of list (first item of list)
   CarE l -> 
