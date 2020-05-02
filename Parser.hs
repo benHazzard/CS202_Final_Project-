@@ -199,7 +199,7 @@ factor :: Parser R5Expr
 factor =
       intExpr
   <|> voidExpr
-  <|> (reserved "nil" >> return NilE)
+  <|> nilExpr 
   <|> carExpr
   <|> cdrExpr
   <|> consExpr
