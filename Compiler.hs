@@ -178,7 +178,7 @@ tcExpr e env = case e of
         --BoolT i -> (ListT BoolT, CdrTE l)
 
   -- empty list
-  NilE -> (ListT u, NilTE) --still needs to give a list Type, and be able to match with any list
+  NilE u -> (ListT u, NilTE) --still needs to give a list Type, and be able to match with any list
 -- What type of Nil, like NillInt or NillBool
 -- Change to NilE -> NilE Type
 --think  cons(1, nil[Int])
@@ -239,9 +239,9 @@ shrinkExpr e = undefined
   -- FunCallTE e1 args argTs t -> FunCallTE (shrinkExpr e1) (map shrinkExpr args) argTs t
 
   -- ConsTE i1 i2 -> ConsTE (shrinkExpr i1) (shrinkExpr i2)
-  -- CdrTE t-> CdrTE t
-  -- CarTE h -> CarTE h
-  -- NilTE -> NilTE
+  -- CdrTE t-> CdrTE shrink(t)
+  -- CarTE h -> CarTE shrink(h)
+  -- NilTE ty-> NilTE ty
 
 
 -- The shrink pass, for an R5 definition
@@ -300,9 +300,9 @@ uniquifyExp e env =
   --   FunCallTE (uniquifyExp e1 env) (map (\e -> uniquifyExp e env) args) argTs t
   
   -- ConsTE i1 i2 -> ConsTE (uniquifyExp i1 env) (uniquifyExp i2 env)
-  -- CarTE h -> CarTE h
+  -- CarTE h -> CarTE (uniquifyExp h env)
   -- CdrTE t -> CdrTE (uniquifyExp t env)
-  -- NilTE -> NilTE
+  -- NilTE ty -> NilTE ty
 
 
 
