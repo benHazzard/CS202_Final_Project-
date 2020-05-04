@@ -1,0 +1,298 @@
+cabal-version: 2.2
+
+-- This file has been generated from package.yaml by hpack version 0.31.2.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: ca334f0f5832123e56906080a4bf887d5fbd37ab72f1d5dc85399cde08636996
+
+name:           cs202-compiler
+version:        0.0.0.0
+license:        GPL-3.0-or-later
+license-file:   LICENSE
+build-type:     Simple
+
+library
+  exposed-modules:
+      CFG
+      Gensym
+      Graph
+  other-modules:
+      Paths_cs202_compiler
+  hs-source-dirs:
+      common
+  ghc-options: -j -O0 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base
+    , containers
+    , directory
+    , parsec >=3.1.13
+    , pretty-simple
+    , process
+    , random
+    , text
+  default-language: Haskell2010
+
+executable a1-compiler
+  main-is: Main.hs
+  other-modules:
+      AST
+      Compiler
+      Interpreter
+      Parser
+      RunTests
+      Paths_cs202_compiler
+  hs-source-dirs:
+      a1
+  ghc-options: -j -O0 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base
+    , containers
+    , cs202-compiler
+    , directory
+    , parsec >=3.1.13
+    , pretty-simple
+    , process
+    , random
+    , text
+  default-language: Haskell2010
+
+executable a2-compiler
+  main-is: Main.hs
+  other-modules:
+      AST
+      Compiler
+      Interpreter
+      Parser
+      RunTests
+      Paths_cs202_compiler
+  hs-source-dirs:
+      a2
+  ghc-options: -j -O0 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base
+    , containers
+    , cs202-compiler
+    , directory
+    , parsec >=3.1.13
+    , pretty-simple
+    , process
+    , random
+    , text
+  default-language: Haskell2010
+
+executable a3-compiler
+  main-is: Main.hs
+  other-modules:
+      AST
+      Compiler
+      Interpreter
+      Parser
+      RunTests
+      Paths_cs202_compiler
+  hs-source-dirs:
+      a3
+  ghc-options: -j -O0 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base
+    , containers
+    , cs202-compiler
+    , directory
+    , parsec >=3.1.13
+    , pretty-simple
+    , process
+    , random
+    , text
+  default-language: Haskell2010
+
+executable a4-compiler
+  main-is: Main.hs
+  other-modules:
+      AST
+      Compiler
+      Interpreter
+      Parser
+      RunTests
+      Paths_cs202_compiler
+  hs-source-dirs:
+      a4
+  ghc-options: -j -O0 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base
+    , containers
+    , cs202-compiler
+    , directory
+    , parsec >=3.1.13
+    , pretty-simple
+    , process
+    , random
+    , text
+  default-language: Haskell2010
+
+executable a5-compiler
+  main-is: Main.hs
+  other-modules:
+      AST
+      Compiler
+      Interpreter
+      Parser
+      RunTests
+      Paths_cs202_compiler
+  hs-source-dirs:
+      a5
+  ghc-options: -j -O0 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base
+    , containers
+    , cs202-compiler
+    , directory
+    , parsec >=3.1.13
+    , pretty-simple
+    , process
+    , random
+    , text
+  default-language: Haskell2010
+
+executable a6-compiler
+  main-is: Main.hs
+  other-modules:
+      AST
+      Compiler
+      Interpreter
+      Parser
+      RunTests
+      Paths_cs202_compiler
+  hs-source-dirs:
+      a6
+  ghc-options: -j -O0 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base
+    , containers
+    , cs202-compiler
+    , directory
+    , parsec >=3.1.13
+    , pretty-simple
+    , process
+    , random
+    , text
+  default-language: Haskell2010
+
+executable a7-compiler
+  main-is: Main.hs
+  other-modules:
+      AST
+      Compiler
+      Interpreter
+      Parser
+      RunTests
+      Paths_cs202_compiler
+  hs-source-dirs:
+      a7
+  ghc-options: -j -O0 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base
+    , containers
+    , cs202-compiler
+    , directory
+    , parsec >=3.1.13
+    , pretty-simple
+    , process
+    , random
+    , text
+  default-language: Haskell2010
+
+executable dynamic-compiler
+  main-is: Main.hs
+  other-modules:
+      AST
+      Compiler
+      Interpreter
+      Parser
+      RunTests
+      Paths_cs202_compiler
+  hs-source-dirs:
+      dynamic
+  ghc-options: -j -O0 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base
+    , containers
+    , cs202-compiler
+    , directory
+    , parsec >=3.1.13
+    , pretty-simple
+    , process
+    , random
+    , text
+  default-language: Haskell2010
+
+executable lists-compiler
+  main-is: Main.hs
+  other-modules:
+      AST
+      Compiler
+      Interpreter
+      Parser
+      RunTests
+      Paths_cs202_compiler
+  hs-source-dirs:
+      lists
+  ghc-options: -j -O0 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base
+    , containers
+    , cs202-compiler
+    , directory
+    , parsec >=3.1.13
+    , pretty-simple
+    , process
+    , random
+    , text
+  default-language: Haskell2010
+
+executable objects-compiler
+  main-is: Main.hs
+  other-modules:
+      AST
+      Compiler
+      Interpreter
+      Parser
+      RunTests
+      Paths_cs202_compiler
+  hs-source-dirs:
+      objects
+  ghc-options: -j -O0 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base
+    , containers
+    , cs202-compiler
+    , directory
+    , parsec >=3.1.13
+    , pretty-simple
+    , process
+    , random
+    , text
+  default-language: Haskell2010
+
+executable records-compiler
+  main-is: Main.hs
+  other-modules:
+      AST
+      Compiler
+      Interpreter
+      Parser
+      RunTests
+      Paths_cs202_compiler
+  hs-source-dirs:
+      records
+  ghc-options: -j -O0 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      base
+    , containers
+    , cs202-compiler
+    , directory
+    , parsec >=3.1.13
+    , pretty-simple
+    , process
+    , random
+    , text
+  default-language: Haskell2010
