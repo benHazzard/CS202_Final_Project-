@@ -172,6 +172,13 @@ tcExpr e env = case e of
 
 
   -- get tail of a list  (gets all other items)
+<<<<<<< HEAD
+  CdrE l -> 
+     let type = fromJust (lookup i1 env)
+      in case type of 
+        IntT i -> (ListT IntT, CdrTE l)
+        BoolT i -> (ListT BoolT, CdrTE l)s
+=======
   CdrE l ->  --almost same as CarE, takes list and return list
     let (typeL, exL) = tcExpr l env -- fromJust (lookup i1 env)
       in case typel of 
@@ -179,6 +186,7 @@ tcExpr e env = case e of
         _ -> error $"NOt a list, so not needed" --so just 1 is error,
         --BoolT i -> (ListT BaoolT, CdrTE l)
 
+>>>>>>> 5d7fdbbe52862927c3f9c836cab86bf193347e07
   -- empty list
   NilE u -> (ListT u, NilTE u) -- be able to match with any list
 -- What type of Nil, like NillInt or NillBool
