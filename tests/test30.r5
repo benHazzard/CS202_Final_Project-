@@ -1,5 +1,0 @@
-def add1(n: Integer): Integer = {
-  n + 1
-}
-
-add1(41)

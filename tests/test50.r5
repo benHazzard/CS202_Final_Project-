@@ -1,3 +1,0 @@
-let x = 5
-in let f = lambda (y: Integer) -> x + y
-in f(6)

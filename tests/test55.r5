@@ -1,5 +1,0 @@
-def mkf(i: Integer): (Integer) -> Integer = {
-  lambda (x: Integer) -> i + x
-}
-
-(mkf(5))(6)

@@ -1,9 +1,0 @@
-def f(i: Integer): Integer = {
-  i + 2
-}
-
-def g(i: Integer): Integer = {
-  f(f(i)) + 1
-}
-
-g(5)
