@@ -1,5 +1,5 @@
 def length(ls: List(Integer)): Integer = {
-  if ls == nil then 0
+  if ls == nil(Integer) then 0
   else 1 + length(cdr(ls))
 }
 

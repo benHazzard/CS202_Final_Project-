@@ -146,27 +146,50 @@ tcExpr e env = case e of
     --let ls = cons(1, cons(2, nil))
     --in car(cdr(ls))
 
+  -- think similar to additon
+  -- recurvely arguement first
+
   -- appending item to a list
-  ConsE i1 i2-> 
-      let type = fromJust (lookup i1 env)
-      in case type of 
-        IntT type -> (ListT BoolT, ConsTE l i)
-        BoolT type -> (ListT IntT, ConsTE l i)
+  ConsE i1 i2->  --list constructer
+      let (type1, ex1) = tcExpr i1 env 
+          (type2, ex2) = tcExpr i2 env
+      in case (type2) of 
+        ListT tyL -> case (type1 == tyL) of 
+          True -> (ListT tyl, ConsTE ex1 ex2)
+          False -> error $ "1st arg type mismatch 2nd list type"
+        _ -> error $ "There is no list Type to match with"
+        -- Type2 to be a listT of the same type of first arg
+
   -- gets head of list (first item of list)
   CarE l -> 
-    let type = fromJust (lookup (head l) env)
-    in case type of 
-        TrueE -> (BoolT, TrueTE)
-        FalseE -> (BoolT, FalseTE)
-        InT i -> (IntT, IntTE i)
+    let (typeL, exL) = tcExpr l env --fromJust (lookup (head l) env)
+    in case typeL of --Hope its a listT
+        ListT t -> (t, CarTE exL)
+        _ -> error $ "Not a ListT, so not from a list. "
+--        TrueE -> (BoolT, TrueTE)
+  --      FalseE -> (BoolT, FalseTE)
+    --    InT i -> (IntT, IntTE i)
   -- get tail of a list  (gets all other items)
+<<<<<<< HEAD
   CdrE l -> 
      let type = fromJust (lookup i1 env)
       in case type of 
         IntT i -> (ListT IntT, CdrTE l)
         BoolT i -> (ListT BoolT, CdrTE l)s
+=======
+  CdrE l ->  --almost same as CarE, takes list and return list
+     let (typeL, exL) = tcExpr l env -- fromJust (lookup i1 env)
+      in case typel of 
+        ListT i -> (ListT i, CdrTE exL)
+        _ -> error $"NOt a list, so not needed" --so just 1 is error,
+        --BoolT i -> (ListT BoolT, CdrTE l)
+
+>>>>>>> 5d7fdbbe52862927c3f9c836cab86bf193347e07
   -- empty list
-  NilE -> (VoidT, NilTE) 
+  NilE u -> (ListT u, NilTE) --still needs to give a list Type, and be able to match with any list
+-- What type of Nil, like NillInt or NillBool
+-- Change to NilE -> NilE Type
+--think  cons(1, nil[Int])
 
 -- Get the name and type of a definition
 getDefnType :: R5Definition -> (Variable, Type)
@@ -224,9 +247,9 @@ shrinkExpr e = undefined
   -- FunCallTE e1 args argTs t -> FunCallTE (shrinkExpr e1) (map shrinkExpr args) argTs t
 
   -- ConsTE i1 i2 -> ConsTE (shrinkExpr i1) (shrinkExpr i2)
-  -- CdrTE t-> CdrTE t
-  -- CarTE h -> CarTE h
-  -- NilTE -> NilTE
+  -- CdrTE t-> CdrTE shrink(t)
+  -- CarTE h -> CarTE shrink(h)
+  -- NilTE ty-> NilTE ty
 
 
 -- The shrink pass, for an R5 definition
@@ -282,13 +305,11 @@ uniquifyExp e env =
   -- VectorSetTE e1 idx e2 -> VectorSetTE (uniquifyExp e1 env) idx (uniquifyExp e2 env)
   -- VoidTE -> VoidTE
   -- FunCallTE e1 args argTs t ->
-  --   FunCallTE (uniquifyExp e1 env) (map (\e -> uniquifyExp e env) args) argTs t
-  
+  --   FunCallTE (uniquifyExp e1 env) (map (\e -> uniquifyExp e env) args) argTs t 
   -- ConsTE i1 i2 -> ConsTE (uniquifyExp i1 env) (uniquifyExp i2 env)
-  -- CarTE h -> CarTE h
+  -- CarTE h -> CarTE (uniquifyExp h env)
   -- CdrTE t -> CdrTE (uniquifyExp t env)
-  -- NilTE -> NilTE
-
+  -- NilTE ty -> NilTE ty
 
 
 -- The uniquify pass, for a single R5 definition
@@ -320,7 +341,37 @@ uniquify defns =
 -- Output: an R5 expression
 -- Transforms variables referencing function names with FunRefTE expressions
 revealExpr :: TypedR5Expr -> [String] -> TypedR5Expr
-revealExpr e funs = undefined
+revealExpr e funs = case e of
+  IntTE i -> IntTE i
+  VarTE x t -> case elem x funs of
+    True -> FunRefTE x t
+    False -> e
+  PlusTE e1 e2 -> PlusTE (revealExpr e1 funs) (revealExpr e2 funs)
+  LetTE x e1 e2 -> LetTE x (revealExpr e1 funs) (revealExpr e2 funs)
+  TrueTE -> TrueTE
+  FalseTE -> FalseTE
+  NotTE e1 -> NotTE (revealExpr e1 funs)
+  IfTE e1 e2 e3 t -> IfTE (revealExpr e1 funs) (revealExpr e2 funs) (revealExpr e3 funs) t
+  AndTE e1 e2 -> IfTE (revealExpr e1 funs) (revealExpr e2 funs) FalseTE BoolT
+  OrTE e1 e2 -> IfTE (revealExpr e1 funs) TrueTE (revealExpr e2 funs) BoolT
+
+  CmpTE CmpLTE e1 e2 -> NotTE (CmpTE CmpLT (revealExpr e2 funs) (revealExpr e1 funs))
+  CmpTE CmpGT e1 e2 -> CmpTE CmpLT (revealExpr e2 funs) (revealExpr e1 funs)
+  CmpTE CmpGTE e1 e2 -> NotTE (CmpTE CmpLT (revealExpr e1 funs) (revealExpr e2 funs))
+  CmpTE c e1 e2 -> CmpTE c (revealExpr e1 funs) (revealExpr e2 funs)
+
+  VectorTE args t -> VectorTE (map (\a -> revealExpr a funs) args) t
+  VectorRefTE e1 idx t -> VectorRefTE (revealExpr e1 funs) idx t
+  VectorSetTE e1 idx e2 -> VectorSetTE (revealExpr e1 funs) idx (revealExpr e2 funs)
+  VoidTE -> VoidTE
+  FunCallTE e1 args argTs t -> 
+    FunCallTE (revealExpr e1 funs) (map (\a -> revealExpr a funs) args) argTs t
+
+  -- List Exprs
+  ConsTE i1 i2 -> ConsTE (revealExpr i1 funs) (revealExpr i2 funs)
+  CdrTE t-> CdrTE (revealExpr t funs)
+  CarTE h -> CarTE (revealExpr h funs)
+  NilTE ty-> NilTE ty
 
 -- Reveal-functions, for R5 expressions
 -- Input: e, an R5 expression
@@ -355,7 +406,34 @@ type EEnv = [(Variable, TypedR5Expr)]
 -- Output: an R5 expression
 -- Moves arguments > 6 into a vector
 limitExpr :: TypedR5Expr -> EEnv -> TypedR5Expr
-limitExpr e env = undefined
+limitExpr e env = case e of 
+  IntTE i -> IntTE i
+  VarTE x t -> case lookup x envs of
+    Nothing  -> VarTE x t
+    Just e' -> e'
+  PlusTE e1 e2 -> PlusTE (limitExpr e1 env) (limitExpr e2 env)
+  LetTE x e1 e2 -> LetTE x (limitExpr e1 env) (limitExpr e2 env)
+  TrueTE -> TrueTE
+  FalseTE -> FalseTE
+  NotTE e1 -> NotTE (limitExpr e1 env)
+  IfTE e1 e2 e3 t -> IfTE (limitExpr e1 env) (limitExpr e2 env) (limitExpr e3 env) t
+  AndTE e1 e2 -> IfTE (limitExpr e1 env) (limitExpr e2 env) FalseTE BoolT
+  OrTE e1 e2 -> IfTE (limitExpr e1 env) TrueTE (limitExpr e2 env) BoolT
+
+  CmpTE CmpLTE e1 e2 -> NotTE (CmpTE CmpLT (revealExpr e2 funs) (revealExpr e1 funs))
+  CmpTE CmpGT e1 e2 -> CmpTE CmpLT (revealExpr e2 funs) (revealExpr e1 funs)
+  CmpTE CmpGTE e1 e2 -> NotTE (CmpTE CmpLT (revealExpr e1 funs) (revealExpr e2 funs))
+  CmpTE c e1 e2 -> CmpTE c (revealExpr e1 funs) (revealExpr e2 funs)
+
+  VectorTE args t -> VectorTE (map (\a -> revealExpr a funs) args) t
+  VectorRefTE e1 idx t -> VectorRefTE (revealExpr e1 funs) idx t
+  VectorSetTE e1 idx e2 -> VectorSetTE (revealExpr e1 funs) idx (revealExpr e2 funs)
+  VoidTE -> VoidTE
+
+  ConsTE i1 i2 -> ConsTE (limitExpr i1 env) (limitExpr i2 env)
+  CdrTE t-> CdrTE (limitExpr t env)
+  CarTE h -> CarTE (limitExpr h env)
+  NilTE ty-> NilTE ty
 
 -- Limit-functions, for an R5 definition
 -- Input: an R5 definition
@@ -398,7 +476,13 @@ mkLet ((x, e) : bs) body = LetTE x e (mkLet bs body)
 -- Output: an R5 expression, without "VectorTE" expressions
 -- This pass compiles "VectorTE" expressions into explicit allocations
 eaExp :: TypedR5Expr -> TypedR5Expr
-eaExp e = undefined
+eaExp e = case e of 
+  
+
+  ConsTE i1 i2 -> ConsTE (eaExp i1) (eaExp i2)
+  CdrTE t-> CdrTE (eaExp t)
+  CarTE h -> CarTE (eaExpr h)
+  NilTE ty-> NilTE ty
 
 -- Expose allocation, for an R5 definition
 -- Input: an R5 definition
@@ -421,7 +505,13 @@ exposeAllocation defns = map eaDefn defns
 -- input:  COMPLEX EXPRESSION
 -- output: COMPLEX EXPRESSION in A-Normal Form
 rcoExp :: TypedR5Expr -> TypedR5Expr
-rcoExp e = undefined
+rcoExp e = case e of 
+
+  ConsTE i1 i2 -> ConsTE (rcoExp i1) (rcoExp i2)
+  CdrTE t-> CdrTE (rcoExp t)
+  CarTE h -> CarTE (rcoExpr h)
+  NilTE ty-> NilTE ty
+ 
 
 -- The remove-complex-operand pass on an expression in ARGUMENT POSITION
 -- input:  COMPLEX EXPRESSION
@@ -1181,7 +1271,9 @@ printX86Arg e = case e of
 
 -- The printX86 pass for x86 instructions
 printX86Instr :: (Int, Int) -> Label -> X86Instr -> String
-printX86Instr (stackSpills, rootStackSpills) name e = undefined
+printX86Instr (stackSpills, rootStackSpills) name e = undefined 
+
+
 
 -- The printX86 pass for a single block
 -- Input:
