@@ -164,7 +164,7 @@ tcExpr e env = case e of
      let type = fromJust (lookup i1 env)
       in case type of 
         IntT i -> (ListT IntT, CdrTE l)
-        BoolT i -> (ListT BoolT, CdrTE l)
+        BoolT i -> (ListT BoolT, CdrTE l)s
   -- empty list
   NilE -> (VoidT, NilTE) 
 
