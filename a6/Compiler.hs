@@ -155,10 +155,7 @@ tcExpr e env = case e of
           (type2, ex2) = tcExpr i2 env
       in case (type2) of
         ListT tyL -> case (type1 == tyL) of
-          True ->
-            let x = gensym "Box"
-                newEnv = Map.insert x tyL env
-            in (ListT tyL, ConsTE ex1 ex2)
+          True -> (ListT tyL, ConsTE ex1 ex2)
           False -> error $ "1st arg type mismatch 2nd list type"
         _ -> error $ "There is no list Type to match with"
         -- Type2 to be a listT of the same type of first arg
@@ -245,28 +242,23 @@ shrinkExpr e =  case e of
     -- let e1' = shrinkExpr i1
     --     e2' = shrinkExpr i2 -- make a list
     --     nwList = [e2']++[e1']
-   IntTE it -> VectorTE [shrinkExpr i1]++[shrinkExpr i2] IntT
-   TrueTE -> VectorTE [shrinkExpr i1]++[shrinkExpr i2] BoolT
-   FalseTE -> VectorTE [shrinkExpr i1]++[shrinkExpr i2] BoolT
-    -- in case e2' of
-    --   InTE _ -> VectorTE nwList IntT
-    --   (TrueTE _, TrueTE _) -> VectorTE nwList IntT
-    --   (IntTE _, InTE _) -> VectorTE nwList IntT
-    --   (IntTE _, InTE _) -> VectorTE nwList IntT
+          IntTE it -> VectorTE ([shrinkExpr i1]++[shrinkExpr i2]) IntT
+          TrueTE -> VectorTE ([shrinkExpr i1]++[shrinkExpr i2]) BoolT
+          FalseTE -> VectorTE ([shrinkExpr i1]++[shrinkExpr i2]) BoolT
 
   CdrTE t -> case t of
     VectorTE args ty ->
       let end = last args
           ln = (length args) - 1
-      in VectorRefTE (shrink end) ln ty
-    _ -> show error $ "No"
+      in VectorRefTE (shrinkExpr end) ln ty
+    _ ->  error $ "No"
   CarTE h -> case h of
     VectorTE args ty ->
       let hD = head args
-      in VectorRefTE (shrink hD) 0 ty
-    _ -> show error $ "No"
+      in VectorRefTE (shrinkExpr hD) 0 ty
+    _ -> error $ "No"
   NilTE ty ->
-    let blk = Set.empty
+    let blk = []
     in VectorTE blk ty
 
 -- The shrink pass, for an R5 definition
