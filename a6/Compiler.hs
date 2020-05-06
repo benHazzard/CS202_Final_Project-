@@ -218,8 +218,7 @@ typecheck (defns, e) =
 -- Output: an R5 expression
 -- Removes "and", "or", ">=", ">", ">="
 shrinkExpr :: TypedR5Expr -> TypedR5Expr
-shrinkExpr e =
-  case e of
+shrinkExpr e =  case e of
   IntTE i -> IntTE i
   VarTE x t -> VarTE x t
   PlusTE e1 e2 -> PlusTE (shrinkExpr e1) (shrinkExpr e2)
@@ -299,8 +298,8 @@ uniquifyExp e env = case e of
   FunCallTE e1 args argTs t ->
     FunCallTE (uniquifyExp e1 env) (map (\e -> uniquifyExp e env) args) argTs t
   ConsTE i1 i2 -> ConsTE (uniquifyExp i1 env) (uniquifyExp i2 env)
-  CarTE h -> CarTE (uniquifyExp h env)
-  CdrTE t -> CdrTE (uniquifyExp t env)
+  CarTE h -> CarTE (uniquifyExp h env) -- grabbing head
+  CdrTE t -> CdrTE (uniquifyExp t env) -- the tail
   NilTE ty -> NilTE ty
 
 
@@ -469,12 +468,46 @@ mkLet ((x, e) : bs) body = LetTE x e (mkLet bs body)
 -- This pass compiles "VectorTE" expressions into explicit allocations
 eaExp :: TypedR5Expr -> TypedR5Expr
 eaExp e = case e of
-
-
+  IntTE _ -> e
+  VarTE _ _ -> e
+  PlusTE e1 e2 -> PlusTE (eaExp e1) (eaExp e2)
+  LetTE x e1 e2 -> LetTE x (eaExp e1) (eaExp e2)
+  TrueTE -> TrueTE
+  FalseTE -> FalseTE
+  NotTE e1 -> NotTE (eaExp e1)
+  CmpTE c e1 e2 -> CmpTE c (eaExp e1) (eaExp e2)
+  IfTE e1 e2 e3 t -> IfTE (eaExp e1) (eaExp e2) (eaExp e3) t
+  VectorRefTE e1 idx t -> VectorRefTE (eaExp e1) idx t
+  VectorSetTE e1 idx e2 -> VectorSetTE (eaExp e1) idx (eaExp e2)
+  VoidTE -> VoidTE
+  VectorTE args vt ->
+    let (VectorT ts) = vt
+        varNames = map (\e -> gensym "v") args
+        varBindings = zip varNames (map eaExp args)
+        len = length args
+        bytes = 8 + 8 * len
+        collectExpr = (IfTE (CmpTE CmpLT (PlusTE (GlobalValTE "free_ptr")
+                                                 (IntTE bytes))
+                                         (GlobalValTE "fromspace_end"))
+                        VoidTE
+                        (CollectTE bytes)
+                        VoidT)
+        allocateExpr = AllocateTE len vt
+        v = gensym "vec"
+        idxs = zip3 varNames [0..] ts
+        vectorSetBindings = map (\(x, idx, t) -> ("_", VectorSetTE (VarTE v vt) idx (VarTE x t))) idxs
+        allBindings =
+          varBindings ++
+          [("_", collectExpr), (v, allocateExpr)] ++
+          vectorSetBindings
+    in mkLet allBindings (VarTE v vt)
+  FunCallTE name args argTs t -> FunCallTE name (map eaExp args) argTs t
+  FunRefTE f t -> FunRefTE f t
   ConsTE i1 i2 -> ConsTE (eaExp i1) (eaExp i2)
   CdrTE t-> CdrTE (eaExp t)
   CarTE h -> CarTE (eaExpr h)
   NilTE ty-> NilTE ty
+  _ -> error $ show e
 
 -- Expose allocation, for an R5 definition
 -- Input: an R5 definition
@@ -498,7 +531,42 @@ exposeAllocation defns = map eaDefn defns
 -- output: COMPLEX EXPRESSION in A-Normal Form
 rcoExp :: TypedR5Expr -> TypedR5Expr
 rcoExp e = case e of
-
+  IntTE i -> IntTE i
+  VarTE x t -> VarTE x t
+  PlusTE e1 e2 ->
+    let (v1, b1) = rcoArg e1
+        (v2, b2) = rcoArg e2
+    in mkLet (b1 ++ b2) (PlusTE v1 v2)
+  LetTE x e1 e2 ->
+    LetTE x (rcoExp e1) (rcoExp e2)
+  TrueTE -> TrueTE
+  FalseTE -> FalseTE
+  NotTE e1 ->
+    let (v1, b1) = rcoArg e1
+    in mkLet b1 (NotTE v1)
+  CmpTE c e1 e2 ->
+    let (v1, b1) = rcoArg e1
+        (v2, b2) = rcoArg e2
+    in mkLet (b1 ++ b2) (CmpTE c v1 v2)
+  IfTE e1 e2 e3 t -> IfTE (rcoExp e1) (rcoExp e2) (rcoExp e3) t
+  VectorRefTE e1 idx t ->
+    let (v, b) = rcoArg e1
+    in mkLet b (VectorRefTE v idx t)
+  VectorSetTE e1 idx e2 ->
+    let (v1, b1) = rcoArg e1
+        (v2, b2) = rcoArg e2
+    in mkLet (b1 ++ b2) (VectorSetTE v1 idx v2)
+  VoidTE -> VoidTE
+  CollectTE i -> CollectTE i
+  AllocateTE i t -> AllocateTE i t
+  GlobalValTE s -> GlobalValTE s
+  FunRefTE f t-> FunRefTE f t
+  FunCallTE e1 args argTs t ->
+    let (v1, b1) = rcoArg e1
+        ps       = map rcoArg args
+        args'    = map fst ps
+        bs       = concat (map snd ps)
+    in mkLet (b1 ++ bs) (FunCallTE v1 args' argTs t)
   ConsTE i1 i2 -> ConsTE (rcoExp i1) (rcoExp i2)
   CdrTE t-> CdrTE (rcoExp t)
   CarTE h -> CarTE (rcoExpr h)
@@ -512,7 +580,60 @@ rcoExp e = case e of
 -- the LIST OF BINDINGS maps variables to SIMPLE EXPRESSIONS
 rcoArg :: TypedR5Expr -> (TypedR5Expr, [Binding])
 rcoArg e = case e of
-
+  IntTE i -> (IntTE i, [])
+  VarTE x t -> (VarTE x t, [])
+  TrueTE -> (TrueTE, [])
+  FalseTE -> (FalseTE, [])
+  PlusTE e1 e2 ->
+    let (v1, b1) = rcoArg e1
+        (v2, b2) = rcoArg e2
+        newV = gensym "tmp"
+        newB = (newV, PlusTE v1 v2)
+    in (VarTE newV IntT, (b1 ++ b2 ++ [newB]))
+  LetTE x e1 e2 ->
+    let e1' = rcoExp e1
+        (v2, b2) = rcoArg e2
+        newB = (x, e1')
+    in (v2, newB : b2)
+  NotTE e1 ->
+    let (v1, b1) = rcoArg e1
+        newV = gensym "tmp"
+        newB = (newV, NotTE v1)
+    in (VarTE newV BoolT, b1 ++ [newB])
+  CmpTE c e1 e2 ->
+    let (v1, b1) = rcoArg e1
+        (v2, b2) = rcoArg e2
+        newV = gensym "tmp"
+        newB = (newV, CmpTE c v1 v2)
+    in (VarTE newV BoolT, b1 ++ b2 ++ [newB])
+  IfTE e1 e2 e3 t ->
+    let newV = gensym "tmp"
+        newB = (newV, IfTE (rcoExp e1) (rcoExp e2) (rcoExp e3) t)
+    in (VarTE newV t, [newB])
+  VectorRefTE e1 idx t ->
+    let (v, b) = rcoArg e1
+        newV = gensym "tmp"
+        newB = (newV, VectorRefTE v idx t)
+    in (VarTE newV t, b ++ [newB])
+  VectorSetTE e1 idx e2 ->
+    let (v1, b1) = rcoArg e1
+        (v2, b2) = rcoArg e2
+        newV = gensym "tmp"
+        newB = (newV, VectorSetTE v1 idx v2)
+    in (VarTE newV VoidT, (b1 ++ b2 ++ [newB]))
+  GlobalValTE s -> (GlobalValTE s, [])
+  FunRefTE name t ->
+    let newV = gensym ("tmp_fun_" ++ name)
+        newB = (newV, FunRefTE name t)
+    in (VarTE newV t, [newB])
+  FunCallTE e1 args argTs t ->
+    let (v1, b1) = rcoArg e1
+        ps       = map rcoArg args
+        args'    = map fst ps
+        bs       = concat (map snd ps)
+        newV     = gensym "tmp"
+        newB     = (newV, FunCallTE v1 args' argTs t)
+    in (VarTE newV t, (b1 ++ bs ++ [newB]))
   ConsTE i1 i2 ->
     let (v1, b1) = rcoArg i1
         (v2, b2) = rcoArg i2
@@ -600,7 +721,16 @@ ecCmp c = case c of
 
 -- Compile a BASIC R5 Expression into a C3Basic Expression
 ecBasic :: TypedR5Expr -> C3Basic
-ecBasic e = undefined
+ecBasic e = case e of
+  PlusTE e1 e2 -> C3PlusE (ecArg e1) (ecArg e2)
+  NotTE e1 -> C3NotE (ecArg e1)
+  CmpTE c e1 e2 -> C3CmpE (ecCmp c) (ecArg e1) (ecArg e2)
+  VectorRefTE e1 i t -> C3VectorRefE (ecArg e1) i
+  VectorSetTE e1 i e2 -> C3VectorSetE (ecArg e1) i (ecArg e2)
+  AllocateTE i t -> C3AllocateE i t
+  FunRefTE name t -> C3FunRefE name t
+  FunCallTE a1 args argTs t -> C3CallE (ecArg a1) (map ecArg args)
+  _ -> C3ArgE (ecArg e)
 
 -- The explicate-control pass on an expression in TAIL POSITION
 -- inputs:
@@ -609,7 +739,25 @@ ecBasic e = undefined
 -- output: a C3 Tail expression
 -- Sometimes updates 'cfg' with new CFG nodes
 ecTail :: TypedR5Expr -> C3CFG -> C3Tail
-ecTail e cfg = undefined
+ecTail e cfg = case e of
+  IntTE _ -> ReturnC3 (ecBasic e)
+  VarTE _ t -> ReturnC3 (ecBasic e)
+  PlusTE e1 e2 -> ReturnC3 (C3PlusE (ecArg e1) (ecArg e2))
+  LetTE x e1 e2 ->
+    let b = ecTail e2 cfg
+    in ecAssign x e1 b cfg
+  IfTE e1 e2 e3 t ->
+    let b1 = ecTail e2 cfg
+        b2 = ecTail e3 cfg
+    in ecPred e1 b1 b2 cfg
+  TrueTE -> ReturnC3 (ecBasic e)
+  FalseTE -> ReturnC3 (ecBasic e)
+  NotTE e1 -> ReturnC3 (ecBasic e)
+  CmpTE c a1 a2 -> ReturnC3 (ecBasic e)
+  VectorRefTE a i t -> ReturnC3 (ecBasic e)
+  VectorSetTE a1 i a2 -> ReturnC3 (ecBasic e)
+  FunCallTE a1 args argTs t -> TailCallC3 (ecArg a1) (map ecArg args)
+  _ -> error (show e)
 
 -- The explicate-control pass on an expression in PREDICATE POSITION
 -- inputs:
@@ -620,7 +768,36 @@ ecTail e cfg = undefined
 -- output: a C3 Tail expression
 -- Sometimes updates 'cfg' with new CFG nodes
 ecPred :: TypedR5Expr -> C3Tail -> C3Tail -> C3CFG -> C3Tail
-ecPred test b1 b2 cfg = undefined
+ecPred test b1 b2 cfg = case test of
+  TrueTE -> b1
+  FalseTE -> b2
+  NotTE e1 -> ecPred e1 b2 b1 cfg
+  VarTE x t ->
+    let thenLabel = gensym "label"
+        elseLabel = gensym "label"
+        _ = addCFGNode cfg thenLabel b1
+        _ = addCFGNode cfg elseLabel b2
+        block = IfC3 CmpEqC3 (VarC3 x t) TrueC3 thenLabel elseLabel
+    in block
+  LetTE x e1 e2 ->
+    let e2Block = ecPred e2 b1 b2 cfg
+    in ecAssign x e1 e2Block cfg
+  CmpTE c e1 e2 ->
+    let thenLabel = gensym "label"
+        elseLabel = gensym "label"
+        _ = addCFGNode cfg thenLabel b1
+        _ = addCFGNode cfg elseLabel b2
+        block = IfC3 (ecCmp c) (ecArg e1) (ecArg e2) thenLabel elseLabel
+    in block
+  IfTE e1 e2 e3 t ->
+    let label1 = gensym "label"
+        label2 = gensym "label"
+        _ = addCFGNode cfg label1 b1
+        _ = addCFGNode cfg label2 b2
+        newb2 = ecPred e2 (GotoC3 label1) (GotoC3 label2) cfg
+        newb3 = ecPred e3 (GotoC3 label1) (GotoC3 label2) cfg
+    in ecPred e1 newb2 newb3 cfg
+  _ -> error ("unknown expr: " ++ (show test))
 
 -- The explicate-control pass on an expression in ASSIGNMENT POSITION
 -- input:
@@ -631,7 +808,31 @@ ecPred test b1 b2 cfg = undefined
 -- output: a C3 Tail expression
 -- Sometimes updates 'cfg' with new CFG nodes
 ecAssign :: Variable -> TypedR5Expr -> C3Tail -> C3CFG -> C3Tail
-ecAssign x e k cfg = undefined
+ecAssign x e k cfg = case e of
+  IntTE _ -> SeqC3 (AssignC3 x IntT (ecBasic e)) k
+  VarTE _ t -> SeqC3 (AssignC3 x t (ecBasic e)) k
+  PlusTE e1 e2 -> SeqC3 (AssignC3 x IntT (C3PlusE (ecArg e1) (ecArg e2))) k
+  LetTE x' e1 e2 ->
+    let b = ecAssign x e2 k cfg
+    in ecAssign x' e1 b cfg
+  CmpTE c e1 e2 -> SeqC3 (AssignC3 x BoolT (ecBasic e)) k
+  IfTE e1 e2 e3 t ->
+    let finallyLabel = gensym "label"
+        _ = addCFGNode cfg finallyLabel k
+        b2 = ecAssign x e2 (GotoC3 finallyLabel) cfg
+        b3 = ecAssign x e3 (GotoC3 finallyLabel) cfg
+    in ecPred e1 b2 b3 cfg
+  TrueTE -> SeqC3 (AssignC3 x BoolT (ecBasic e)) k
+  FalseTE -> SeqC3 (AssignC3 x BoolT (ecBasic e)) k
+  NotTE _ -> SeqC3 (AssignC3 x BoolT (ecBasic e)) k
+  VectorSetTE e1 i e2 -> SeqC3 (AssignC3 x VoidT (ecBasic e)) k
+  AllocateTE i t -> SeqC3 (AssignC3 x t (ecBasic e)) k
+  VoidTE -> SeqC3 (AssignC3 x VoidT (ecBasic e)) k
+  CollectTE bytes -> SeqC3 (CollectC3 bytes) k
+  VectorRefTE e1 i t -> SeqC3 (AssignC3 x t (ecBasic e)) k
+  FunRefTE name t -> SeqC3 (AssignC3 x t (ecBasic e)) k
+  FunCallTE a1 args argsT t -> SeqC3 (AssignC3 x t (ecBasic e)) k
+  _ -> error $ show e
 
 ecDefn :: TypedR5Definition -> C3Defn
 ecDefn (DefnT name args outputT body) =
@@ -736,13 +937,68 @@ mkTag ts =
 -- input:  a C3Stmt
 -- output: a list of pseudo-x86 instructions
 siStmt :: C3Stmt -> [X86Instr]
-siStmt e = undefined
+siStmt e = case e of
+  AssignC3 x t (C3ArgE a) -> [ MovqE (siArg a) (VarXE x t) ]
+  AssignC3 x t (C3PlusE a1 a2) -> [ MovqE (siArg a1) (VarXE x t)
+                                  , AddqE (siArg a2) (VarXE x t) ]
+  AssignC3 x t (C3CmpE c a1 a2) -> [ CmpqE (siArg a2) (siArg a1)
+                                   , SetE (siCC c) (ByteRegE "al")
+                                   , MovzbqE (ByteRegE "al") (VarXE x t) ]
+  AssignC3 x t (C3NotE a1) -> [ MovqE (siArg a1) (VarXE x t)
+                              , XorqE (IntXE 1) (VarXE x t) ]
+  AssignC3 x t (C3AllocateE len (VectorT ts)) ->
+    let tag = mkTag ts
+        bytes = 8 * (len + 1)
+    in [ MovqE (GlobalValXE "free_ptr") (VarXE x t)
+       , AddqE (IntXE bytes) (GlobalValXE "free_ptr")
+       , MovqE (VarXE x t) (RegE "r11")
+       , MovqE (IntXE tag) (DerefE "r11" 0) ]
+  AssignC3 x t (C3VectorSetE a1 i a2) ->
+    let offset = 8 * (i + 1)
+    in [ MovqE (siArg a1) (RegE "r11")
+       , MovqE (siArg a2) (DerefE "r11" offset)
+       , MovqE (IntXE 0) (VarXE x t) ]
+  AssignC3 x t (C3VectorRefE a1 i) ->
+    let offset = 8 * (i + 1)
+    in [ MovqE (siArg a1) (RegE "r11")
+       , MovqE (DerefE "r11" offset) (VarXE x t) ]
+  CollectC3 bytes ->
+    [ MovqE (RegE "r15") (RegE "rdi")
+    , MovqE (IntXE bytes) (RegE "rsi")
+    , CallqE "collect" ]
+  AssignC3 x t (C3FunRefE f _) ->
+    [ LeaqE (FunRefXE f) (VarXE x t) ]
+  AssignC3 x t (C3CallE a1 args) ->
+    let ps        = zip args argRegisters
+        argInstrs = map (\(arg, reg) -> MovqE (siArg arg) (RegE reg)) ps
+    in argInstrs ++
+       [ IndirectCallqE (siArg a1)
+       , MovqE (RegE "rax") (VarXE x t)
+       ]
+  _ -> error (show e)
 
 -- The select-instructions pass on a C3Tail expression
 -- input:  a C3 Tail expression
 -- output: a list of pseudo-X86 instructions
 siTail :: C3Tail -> [X86Instr]
-siTail e = undefined
+siTail e = case e of
+  ReturnC3 a ->
+    let newV = gensym "tmp" in
+      siStmt (AssignC3 newV IntT a) ++
+           [ MovqE (VarXE newV IntT) (RegE "rax")
+           , RetqE ]
+  SeqC3 s t ->  (siStmt s) ++ (siTail t)
+  IfC3 c a1 a2 l1 l2 ->
+    [ CmpqE (siArg a2) (siArg a1)
+    , JmpIfE (siCC c) l1
+    , JmpE l2 ]
+  GotoC3 l -> [ JmpE l ]
+  TailCallC3 a1 args ->
+    let a1'       = siArg a1
+        args'     = map siArg args
+        argInstrs = map (\(arg, reg) -> MovqE arg reg) (zip args' callingRegs)
+    in argInstrs ++ [TailJmpE a1']
+  _ -> error $ show e
 
 -- The select-instructions pass, for a basic block
 -- Input: a pair
@@ -806,7 +1062,21 @@ varsArg e = case e of
 -- output: the set of live-before variables for *this* instruction in the program
 --   in other words: the set of live-after variables for the *previous* instruction
 ulInstr :: X86Instr -> Set TypedVariable -> Set TypedVariable
-ulInstr e lAfter = undefined
+ulInstr e lAfter = case e of
+  MovqE e1 e2 -> Set.union (Set.difference lAfter (varsArg e2)) (varsArg e1)
+  AddqE e1 e2 -> Set.union lAfter (Set.union (varsArg e1) (varsArg e2))
+  RetqE -> lAfter
+  JmpE _ -> lAfter
+  JmpIfE _ _ -> lAfter
+  CmpqE e1 e2 -> Set.union lAfter (Set.union (varsArg e1) (varsArg e2))
+  MovzbqE (ByteRegE _) e2 -> Set.difference lAfter (varsArg e2)
+  SetE c (ByteRegE _) -> lAfter
+  XorqE e1 e2 -> Set.union lAfter (Set.union (varsArg e1) (varsArg e2))
+  CallqE _ -> lAfter
+  TailJmpE e1 -> Set.union lAfter (varsArg e1)
+  LeaqE _ e2 -> Set.difference lAfter (varsArg e2)
+  IndirectCallqE e1 -> Set.union lAfter (varsArg e1)
+  _ -> error (show e)
 
 -- Liveness analysis, for multiple instructions
 -- input:  a list of instructions
@@ -928,7 +1198,33 @@ isVecVar _ = False
 -- output:
 --  - a new interference graph
 biInstr :: (X86Instr, Set TypedVariable) -> Graph X86Arg -> Graph X86Arg
-biInstr (instr, liveAfter) g = undefined
+biInstr (instr, liveAfter) g = case instr of
+  MovqE _ (VarXE x t) -> addEdges g (VarXE x t) (Set.toList liveAfter)
+  MovqE _ _ -> g
+  AddqE _ (VarXE x t) -> addEdges g (VarXE x t) (Set.toList liveAfter)
+  AddqE _ _ -> g
+  CmpqE _ (VarXE x t) -> addEdges g (VarXE x t) (Set.toList liveAfter)
+  CmpqE _ _ -> g
+  JmpIfE _ _ -> g
+  JmpE _ -> g
+  SetE _ (ByteRegE _) -> g
+  MovzbqE (ByteRegE _) (VarXE x t) -> addEdges g (VarXE x t) (Set.toList liveAfter)
+  MovzbqE (ByteRegE _) _ -> g
+  RetqE -> g
+  XorqE _ (VarXE x t) -> addEdges g (VarXE x t) (Set.toList liveAfter)
+  XorqE _ _ -> g
+  CallqE f ->
+    let vecVars = filter isVecVar (Set.toList liveAfter)
+        -- add edges from vector-valued variables to *all* registers
+        g1      = addRegisterEdges g registerArgs vecVars
+        -- add edges from *all* variables to *caller-saved* registers
+        g2      = addRegisterEdges g1 callerSavedArgs (Set.toList liveAfter)
+    in g2
+  LeaqE _ (VarXE x t) -> addEdges g (VarXE x t) (Set.toList liveAfter)
+  LeaqE _ _ -> g
+  TailJmpE _ -> addRegisterEdges g callerSavedArgs (Set.toList liveAfter)
+  IndirectCallqE _ -> addRegisterEdges g callerSavedArgs (Set.toList liveAfter)
+  _ -> error (show instr)
 
 -- build-interference, for a list of instructions
 -- input:  a list of pairs, each one containing an instruction and live-after set
@@ -1132,7 +1428,13 @@ mkStackLoc i reg = DerefE reg (-8 * (i + 1))
 --  - a variable (x)
 -- output: the location for the variable "x"
 getHome :: Coloring -> TypedVariable -> (Variable, X86Arg)
-getHome cs (x, t) = undefined
+getHome cs (x, t) =
+  let color = cs Map.! x
+      loc   = case color of
+                RegColor r -> RegE r
+                StackColor i -> mkStackLoc i "rbp"
+                RootStackColor i -> mkStackLoc i "r15"
+  in (x, loc)
 
 -- When printing out the homes and coloring information, skip printing
 -- if the output would be longer than this value (default: 5000 characters).
@@ -1192,10 +1494,31 @@ ahBlock homes (l, instrs) = (l, map (ahInstr homes) instrs)
 
 -- copied from assign-homes
 ahInstr :: [(Variable, X86Arg)] -> X86Instr -> X86Instr
-ahInstr homes e = undefined
+ahInstr homes e = case e of
+  MovqE a1 a2 -> MovqE (ahArg homes a1) (ahArg homes a2)
+  AddqE a1 a2 -> AddqE (ahArg homes a1) (ahArg homes a2)
+  RetqE -> RetqE
+  CmpqE a1 a2 -> CmpqE (ahArg homes a1) (ahArg homes a2)
+  JmpIfE c l -> JmpIfE c l
+  JmpE l -> JmpE l
+  SetE _ (ByteRegE _) -> e
+  MovzbqE (ByteRegE r) a2 -> MovzbqE (ByteRegE r) (ahArg homes a2)
+  XorqE a1 a2 -> XorqE (ahArg homes a1) (ahArg homes a2)
+  CallqE f -> CallqE f
+  LeaqE a1 a2 -> LeaqE (ahArg homes a1) (ahArg homes a2)
+  TailJmpE a1 -> TailJmpE (ahArg homes a1)
+  IndirectCallqE a1 -> IndirectCallqE (ahArg homes a1)
+  _ -> error (show e)
 
 ahArg :: [(Variable, X86Arg)] -> X86Arg -> X86Arg
-ahArg homes e = undefined
+ahArg homes e = case e of
+  VarXE s t -> fromJust $ lookup s homes
+  RegE _ -> e
+  IntXE _ -> e
+  GlobalValXE _ -> e
+  DerefE _ _ -> e
+  FunRefXE _ -> e
+  _ -> error (show e)
 
 ------------------------------------------------------------
 -- patch-instructions
@@ -1234,7 +1557,34 @@ piBlock (l, instrs) = (l, concat (map piInstr instrs))
 --   - the number of stack locations used
 -- Patched instructions contain at most one memory access in each `movq` or `addq` instruction
 piInstr :: X86Instr -> [X86Instr]
-piInstr e = undefined
+piInstr e = case e of
+  MovqE (DerefE r1 i1) (DerefE r2 i2) -> [ MovqE (DerefE r1 i1) (RegE "rax")
+                                         , MovqE (RegE "rax") (DerefE r2 i2) ]
+  MovqE _ _ -> [e]
+  AddqE (DerefE r1 i1) (DerefE r2 i2) -> [ MovqE (DerefE r1 i1) (RegE "rax")
+                                         , AddqE (RegE "rax") (DerefE r2 i2) ]
+  AddqE _ _ -> [e]
+  RetqE -> [e]
+  CmpqE a1 (IntXE i) -> [ MovqE (IntXE i) (RegE "rax")
+                        , CmpqE a1 (RegE "rax") ]
+  CmpqE _ _ -> [e]
+  JmpIfE _ _ -> [e]
+  JmpE _ -> [e]
+  SetE _ (ByteRegE _) -> [e]
+  MovzbqE (ByteRegE r) (DerefE r1 i1) -> [ MovzbqE (ByteRegE r) (RegE "rax")
+                                         , MovqE (RegE "rax") (DerefE r1 i1) ]
+  MovzbqE _ _ -> [e]
+  XorqE (DerefE r1 i1) (DerefE r2 i2) -> [ MovqE (DerefE r1 i1) (RegE "rax")
+                                         , XorqE (RegE "rax") (DerefE r2 i2) ]
+  XorqE _ _ -> [e]
+  CallqE _ -> [e]
+  LeaqE (FunRefXE f) (DerefE r o) -> [ LeaqE (FunRefXE f) (RegE "rax")
+                                     , MovqE (RegE "rax") (DerefE r o) ]
+  LeaqE (FunRefXE _) _ -> [e]
+  TailJmpE d -> [ MovqE d (RegE "rax")
+                , TailJmpE (RegE "rax") ]
+  IndirectCallqE _ -> [e]
+  _ -> error (show e)
 
 ------------------------------------------------------------
 -- print-x86
@@ -1275,7 +1625,31 @@ printX86Arg e = case e of
 
 -- The printX86 pass for x86 instructions
 printX86Instr :: (Int, Int) -> Label -> X86Instr -> String
-printX86Instr (stackSpills, rootStackSpills) name e = undefined
+printX86Instr (stackSpills, rootStackSpills) name e =  case e of
+  MovqE a1 a2 -> " movq " ++ (printX86Arg a1) ++ ", " ++ (printX86Arg a2)
+  AddqE a1 a2 -> " addq " ++ (printX86Arg a1) ++ ", " ++ (printX86Arg a2)
+  RetqE -> " jmp " ++ (printFun (name ++ "_conclusion"))
+  CmpqE a1 a2 -> " cmpq " ++ (printX86Arg a1) ++ ", " ++ (printX86Arg a2)
+  JmpIfE CCe l -> " je " ++ (printFun l)
+  JmpIfE CCl l -> " jl " ++ (printFun l)
+  JmpE l -> " jmp " ++ (printFun l)
+  SetE CCe a -> " sete " ++ (printX86Arg a)
+  SetE CCl a -> " setl " ++ (printX86Arg a)
+  MovzbqE (ByteRegE r) a2 -> " movzbq %" ++ r ++ ", " ++ (printX86Arg a2)
+  XorqE a1 a2 -> " xorq " ++ (printX86Arg a1) ++ ", " ++ (printX86Arg a2)
+  CallqE f -> " callq " ++ (printFun f)
+  LeaqE a1 a2 -> " leaq " ++ (printX86Arg a1) ++ ", " ++ (printX86Arg a2)
+  TailJmpE a1 ->
+    let popqs = map (\r -> " popq %" ++ r ++ "\n") (reverse calleeSavedRegisters)
+        stackSize = align (8 * stackSpills) 16
+        rootStackSize = 8 * rootStackSpills
+    in " subq $" ++ (show rootStackSize) ++ ", %r15\n" ++
+       " addq $" ++ (show stackSize) ++ ", %rsp\n" ++
+       (concat popqs) ++
+       " popq %rbp\n" ++
+       " jmp *" ++ (printX86Arg a1)
+  IndirectCallqE a1 -> " callq *" ++ (printX86Arg a1)
+  _ -> error $ show e
 
 
 
