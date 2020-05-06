@@ -157,15 +157,15 @@ tcExpr e env = case e of
         ListT tyL -> case (type1 == tyL) of
           True ->
             let x = gensym "Box"
-                newEnv = Mapinsert x tyL env
-            in (ListT tyl, ConsTE ex1 ex2)
+                newEnv = Map.insert x tyL env
+            in (ListT tyL, ConsTE ex1 ex2)
           False -> error $ "1st arg type mismatch 2nd list type"
         _ -> error $ "There is no list Type to match with"
         -- Type2 to be a listT of the same type of first arg
 
   -- gets head of list (first item of list)
   CarE h ->
-    let (typeH, exH) = tcExpr l env
+    let (typeH, exH) = tcExpr h env
     in case typeH of --Hope its a listT
         ListT t -> (t, CarTE exH)
         _ -> error $ "Not a ListT, so no head can be made. "
@@ -177,7 +177,7 @@ tcExpr e env = case e of
   -- get tail of a list  (gets all other items)
   CdrE l ->  --almost same as CarE, takes list and return list
     let (typeL, exL) = tcExpr l env -- fromJust (lookup i1 env)
-      in case typel of
+      in case typeL of
         ListT i -> (ListT i, CdrTE exL)
         _ -> error $"Not a list, so not needed" --so just 1 is error,
         --BoolT i -> (ListT BaoolT, CdrTE l)
@@ -241,13 +241,19 @@ shrinkExpr e =  case e of
   VectorSetTE e1 idx e2 -> VectorSetTE (shrinkExpr e1) idx (shrinkExpr e2)
   VoidTE -> VoidTE
   FunCallTE e1 args argTs t -> FunCallTE (shrinkExpr e1) (map shrinkExpr args) argTs t
-  ConsTE i1 i2 -> --VectorE e1 e2, append first to second. COuld make the 2nd a list
-    let env = Set.empty
-        (u, td) = tcExp e env
-        e1' = shrinkExpr i1
-        e2' = shrinkExpr i2 -- make a list
-        nwList = [e2']++e1'
-    in VectorTE nwList u
+  ConsTE i1 i2 -> case i1 of --VectorE e1 e2, append first to second. COuld make the 2nd a list
+    -- let e1' = shrinkExpr i1
+    --     e2' = shrinkExpr i2 -- make a list
+    --     nwList = [e2']++[e1']
+   IntTE it -> VectorTE [shrinkExpr i1]++[shrinkExpr i2] IntT
+   TrueTE -> VectorTE [shrinkExpr i1]++[shrinkExpr i2] BoolT
+   FalseTE -> VectorTE [shrinkExpr i1]++[shrinkExpr i2] BoolT
+    -- in case e2' of
+    --   InTE _ -> VectorTE nwList IntT
+    --   (TrueTE _, TrueTE _) -> VectorTE nwList IntT
+    --   (IntTE _, InTE _) -> VectorTE nwList IntT
+    --   (IntTE _, InTE _) -> VectorTE nwList IntT
+
   CdrTE t -> case t of
     VectorTE args ty ->
       let end = last args
@@ -256,7 +262,7 @@ shrinkExpr e =  case e of
     _ -> show error $ "No"
   CarTE h -> case h of
     VectorTE args ty ->
-      let hD = head arg
+      let hD = head args
       in VectorRefTE (shrink hD) 0 ty
     _ -> show error $ "No"
   NilTE ty ->
@@ -316,10 +322,10 @@ uniquifyExp e env = case e of
   VoidTE -> VoidTE
   FunCallTE e1 args argTs t ->
     FunCallTE (uniquifyExp e1 env) (map (\e -> uniquifyExp e env) args) argTs t
-  ConsTE i1 i2 -> ConsTE (uniquifyExp i1 env) (uniquifyExp i2 env)
-  CarTE h -> CarTE (uniquifyExp h env) -- grabbing head
-  CdrTE t -> CdrTE (uniquifyExp t env) -- the tail
-  NilTE ty -> NilTE ty
+  -- ConsTE i1 i2 -> ConsTE (uniquifyExp i1 env) (uniquifyExp i2 env)
+  -- CarTE h -> CarTE (uniquifyExp h env) -- grabbing head
+  -- CdrTE t -> CdrTE (uniquifyExp t env) -- the tail
+  -- NilTE ty -> NilTE ty
 
 
 -- The uniquify pass, for a single R5 definition
@@ -378,10 +384,10 @@ revealExpr e funs = case e of
     FunCallTE (revealExpr e1 funs) (map (\a -> revealExpr a funs) args) argTs t
 
   -- List Exprs
-  ConsTE i1 i2 -> ConsTE (revealExpr i1 funs) (revealExpr i2 funs)
-  CdrTE t-> CdrTE (revealExpr t funs)
-  CarTE h -> CarTE (revealExpr h funs)
-  NilTE ty-> NilTE ty
+  -- ConsTE i1 i2 -> ConsTE (revealExpr i1 funs) (revealExpr i2 funs)
+  -- CdrTE t-> CdrTE (revealExpr t funs)
+  -- CarTE h -> CarTE (revealExpr h funs)
+  -- NilTE ty-> NilTE ty
 
 -- Reveal-functions, for R5 expressions
 -- Input: e, an R5 expression
@@ -418,7 +424,7 @@ type EEnv = [(Variable, TypedR5Expr)]
 limitExpr :: TypedR5Expr -> EEnv -> TypedR5Expr
 limitExpr e env = case e of
   IntTE i -> IntTE i
-  VarTE x t -> case lookup x envs of
+  VarTE x t -> case lookup x env of
     Nothing  -> VarTE x t
     Just e' -> e'
   PlusTE e1 e2 -> PlusTE (limitExpr e1 env) (limitExpr e2 env)
@@ -429,21 +435,18 @@ limitExpr e env = case e of
   IfTE e1 e2 e3 t -> IfTE (limitExpr e1 env) (limitExpr e2 env) (limitExpr e3 env) t
   AndTE e1 e2 -> IfTE (limitExpr e1 env) (limitExpr e2 env) FalseTE BoolT
   OrTE e1 e2 -> IfTE (limitExpr e1 env) TrueTE (limitExpr e2 env) BoolT
-
-  CmpTE CmpLTE e1 e2 -> NotTE (CmpTE CmpLT (revealExpr e2 funs) (revealExpr e1 funs))
-  CmpTE CmpGT e1 e2 -> CmpTE CmpLT (revealExpr e2 funs) (revealExpr e1 funs)
-  CmpTE CmpGTE e1 e2 -> NotTE (CmpTE CmpLT (revealExpr e1 funs) (revealExpr e2 funs))
-  CmpTE c e1 e2 -> CmpTE c (revealExpr e1 funs) (revealExpr e2 funs)
-
-  VectorTE args t -> VectorTE (map (\a -> revealExpr a funs) args) t
-  VectorRefTE e1 idx t -> VectorRefTE (revealExpr e1 funs) idx t
-  VectorSetTE e1 idx e2 -> VectorSetTE (revealExpr e1 funs) idx (revealExpr e2 funs)
+  CmpTE CmpLTE e1 e2 -> NotTE (CmpTE CmpLT (limitExpr e2 env) (limitExpr e1 env))
+  CmpTE CmpGT e1 e2 -> CmpTE CmpLT (limitExpr e2 env) (limitExpr e1 env)
+  CmpTE CmpGTE e1 e2 -> NotTE (CmpTE CmpLT (limitExpr e1 env) (limitExpr e2 env))
+  CmpTE c e1 e2 -> CmpTE c (limitExpr e1 env) (limitExpr e2 env)
+  VectorTE args t -> VectorTE (map (\a -> limitExpr a env) args) t
+  VectorRefTE e1 idx t -> VectorRefTE (limitExpr e1 env) idx t
+  VectorSetTE e1 idx e2 -> VectorSetTE (limitExpr e1 env) idx (limitExpr e2 env)
   VoidTE -> VoidTE
-
-  ConsTE i1 i2 -> ConsTE (limitExpr i1 env) (limitExpr i2 env)
-  CdrTE t-> CdrTE (limitExpr t env)
-  CarTE h -> CarTE (limitExpr h env)
-  NilTE ty-> NilTE ty
+  -- ConsTE i1 i2 -> ConsTE (limitExpr i1 env) (limitExpr i2 env)
+  -- CdrTE t-> CdrTE (limitExpr t env)
+  -- CarTE h -> CarTE (limitExpr h env)
+  -- NilTE ty-> NilTE ty
 
 -- Limit-functions, for an R5 definition
 -- Input: an R5 definition
@@ -522,10 +525,10 @@ eaExp e = case e of
     in mkLet allBindings (VarTE v vt)
   FunCallTE name args argTs t -> FunCallTE name (map eaExp args) argTs t
   FunRefTE f t -> FunRefTE f t
-  ConsTE i1 i2 -> ConsTE (eaExp i1) (eaExp i2) --VectorRef [e1,e2]
-  CdrTE t-> CdrTE (eaExp t) --VectorRefE e1' 1
-  CarTE h -> CarTE (eaExpr h) --VectorRefE e1' 0
-  NilTE ty-> NilTE ty
+  -- ConsTE i1 i2 -> ConsTE (eaExp i1) (eaExp i2) --VectorRef [e1,e2]
+  -- CdrTE t-> (eaExp t) --VectorRefE e1' 1
+  -- CarTE h -> (eaExpr h) --VectorRefE e1' 0
+  -- NilTE ty-> NilTE ty
   _ -> error $ show e
 
 -- Expose allocation, for an R5 definition
@@ -586,10 +589,10 @@ rcoExp e = case e of
         args'    = map fst ps
         bs       = concat (map snd ps)
     in mkLet (b1 ++ bs) (FunCallTE v1 args' argTs t)
-  ConsTE i1 i2 -> ConsTE (rcoExp i1) (rcoExp i2)
-  CdrTE t-> CdrTE (rcoExp t)
-  CarTE h -> CarTE (rcoExpr h)
-  NilTE ty-> NilTE ty
+  -- ConsTE i1 i2 -> ConsTE (rcoExp i1) (rcoExp i2)
+  -- CdrTE t-> CdrTE (rcoExp t)
+  -- CarTE h -> CarTE (rcoExpr h)
+  -- NilTE ty-> NilTE ty
 
 
 -- The remove-complex-operand pass on an expression in ARGUMENT POSITION
@@ -653,17 +656,17 @@ rcoArg e = case e of
         newV     = gensym "tmp"
         newB     = (newV, FunCallTE v1 args' argTs t)
     in (VarTE newV t, (b1 ++ bs ++ [newB]))
-  ConsTE i1 i2 ->
-    let (v1, b1) = rcoArg i1
-        (v2, b2) = rcoArg i2
-    in (ConsTE v1 v2, (b1++b2))
-  CdrTE h ->
-    let (v, b) = rcoArg h
-    in (CdrTE v, b)
-  CarTE h ->
-    let (v, b) = rcoArg h
-    in (CarTE v, b)
-  NilTE u ->  (NilTE u, [])
+  -- ConsTE i1 i2 ->
+  --   let (v1, b1) = rcoArg i1
+  --       (v2, b2) = rcoArg i2
+  --   in (ConsTE v1 v2, (b1++b2))
+  -- CdrTE h ->
+  --   let (v, b) = rcoArg h
+  --   in (CdrTE v, b)
+  -- CarTE h ->
+  --   let (v, b) = rcoArg h
+  --   in (CarTE v, b)
+  -- NilTE u ->  (NilTE u, [])
 
 -- Remove complex operands, for an R5 definition
 -- Input: an R5 definition
