@@ -155,7 +155,10 @@ tcExpr e env = case e of
           (type2, ex2) = tcExpr i2 env
       in case (type2) of
         ListT tyL -> case (type1 == tyL) of
-          True -> (ListT tyl, ConsTE ex1 ex2)
+          True ->
+            let x = gensym "Box"
+                newEnv = Mapinsert x tyL env
+            in (ListT tyl, ConsTE ex1 ex2)
           False -> error $ "1st arg type mismatch 2nd list type"
         _ -> error $ "There is no list Type to match with"
         -- Type2 to be a listT of the same type of first arg
@@ -238,11 +241,27 @@ shrinkExpr e =  case e of
   VectorSetTE e1 idx e2 -> VectorSetTE (shrinkExpr e1) idx (shrinkExpr e2)
   VoidTE -> VoidTE
   FunCallTE e1 args argTs t -> FunCallTE (shrinkExpr e1) (map shrinkExpr args) argTs t
-  ConsTE i1 i2 -> ConsTE (shrinkExpr i1) (shrinkExpr i2)
-  CdrTE t-> CdrTE shrink(t)
-  CarTE h -> CarTE shrink(h)
-  NilTE ty-> NilTE ty
-
+  ConsTE i1 i2 -> --VectorE e1 e2, append first to second. COuld make the 2nd a list
+    let env = Set.empty
+        (u, td) = tcExp e env
+        e1' = shrinkExpr i1
+        e2' = shrinkExpr i2 -- make a list
+        nwList = [e2']++e1'
+    in VectorTE nwList u
+  CdrTE t -> case t of
+    VectorTE args ty ->
+      let end = last args
+          ln = (length args) - 1
+      in VectorRefTE (shrink end) ln ty
+    _ -> show error $ "No"
+  CarTE h -> case h of
+    VectorTE args ty ->
+      let hD = head arg
+      in VectorRefTE (shrink hD) 0 ty
+    _ -> show error $ "No"
+  NilTE ty ->
+    let blk = Set.empty
+    in VectorTE blk ty
 
 -- The shrink pass, for an R5 definition
 -- Input:  an R5 definition
@@ -284,7 +303,7 @@ uniquifyExp e env = case e of
     PlusTE (uniquifyExp e1 env) (uniquifyExp e2 env)
   LetTE x e1 e2 ->
     let newV = gensym x
-      newEnv = (x, newV) : env
+        newEnv = (x, newV) : env
     in LetTE newV (uniquifyExp e1 newEnv) (uniquifyExp e2 newEnv)
   TrueTE -> TrueTE
   FalseTE -> FalseTE
@@ -503,9 +522,9 @@ eaExp e = case e of
     in mkLet allBindings (VarTE v vt)
   FunCallTE name args argTs t -> FunCallTE name (map eaExp args) argTs t
   FunRefTE f t -> FunRefTE f t
-  ConsTE i1 i2 -> ConsTE (eaExp i1) (eaExp i2)
-  CdrTE t-> CdrTE (eaExp t)
-  CarTE h -> CarTE (eaExpr h)
+  ConsTE i1 i2 -> ConsTE (eaExp i1) (eaExp i2) --VectorRef [e1,e2]
+  CdrTE t-> CdrTE (eaExp t) --VectorRefE e1' 1
+  CarTE h -> CarTE (eaExpr h) --VectorRefE e1' 0
   NilTE ty-> NilTE ty
   _ -> error $ show e
 
