@@ -8,7 +8,7 @@ import Parser hiding (main)
 
 type Env = [(String, Val)]
 
-data Val = IntVal Int | BoolVal Bool | AddrVal Addr | VoidVal | ClosureVal [String] R4Expr Env
+data Val = IntVal Int | BoolVal Bool | AddrVal Addr | VoidVal | ClosureVal [String] R5Expr Env
   deriving (Eq, Ord, Show)
 
 data VectorVal = Vec [Val]
@@ -17,7 +17,7 @@ data VectorVal = Vec [Val]
 type Addr = Int
 type Store = [(Addr, VectorVal)]
 
-eval :: R4Expr -> Env -> Store -> (Val, Store)
+eval :: R5Expr -> Env -> Store -> (Val, Store)
 eval e env sto = case e of
   IntE i -> (IntVal i, sto)
   VarE x -> case lookup x env of
@@ -84,19 +84,19 @@ eval e env sto = case e of
         (vals, sto2) = evalArgs args env sto1
         bodyEnv = (zip argNames vals) ++ cEnv
     in eval body bodyEnv sto2
-    
+
   _ -> error (show e)
 
-mkDef :: Env -> R4Definition -> (String, Val)
+mkDef :: Env -> R5Definition -> (String, Val)
 mkDef env (Defn name argPs _ body) =
   (name, ClosureVal (map fst argPs) body env)
 
-buildDefEnv :: [R4Definition] -> Env
+buildDefEnv :: [R5Definition] -> Env
 buildDefEnv defs =
   let env = map (mkDef env) defs
   in env
 
-evalArgs :: [R4Expr] -> Env -> Store -> ([Val], Store)
+evalArgs :: [R5Expr] -> Env -> Store -> ([Val], Store)
 evalArgs [] env sto = ([], sto)
 evalArgs (e : es) env sto =
   let (vals, sto1) = evalArgs es env sto
@@ -109,7 +109,7 @@ updateStore sto a v = (a, v) : (filter ((a /=).fst) sto)
 replace :: Int -> Val -> [Val] -> [Val]
 replace index val = map (\(index', val') -> if index' == index then val else val') . zip [0..]
 
-evalProgram :: R4Program -> (Val, Store)
+evalProgram :: R5Program -> (Val, Store)
 evalProgram (defs, e) =
   let initEnv = buildDefEnv defs
   in eval e initEnv []

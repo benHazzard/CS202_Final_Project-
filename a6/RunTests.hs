@@ -61,13 +61,13 @@ runTest fileName = do
   -- Remove the .s file and compiled files
   removeFile assemblyFileName
   removeFile "a.out"
-  
+
   putStrLn ""
 
 main :: IO ()
 main = do
   sourceFiles <- listDirectory "tests"
-  let files = sort $ filter (".r4" `isSuffixOf`) sourceFiles
+  let files = sort $ filter (".r5" `isSuffixOf`) sourceFiles
   putStrLn $ "Test files: " ++ (show files)
   mapM_ runTest files
   putStrLn "done"
