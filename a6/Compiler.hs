@@ -241,22 +241,23 @@ shrinkExpr e =  case e of
   ConsTE i1 i2 -> case i1 of --VectorE e1 e2, append first to second. COuld make the 2nd a list
     -- let e1' = shrinkExpr i1
     --     e2' = shrinkExpr i2 -- make a list
-    --     nwList = [e2']++[e1']
+    --     nwList = [e2']++[e1'] -> [e2', [e1']]
           IntTE it -> VectorTE ([shrinkExpr i1]++[shrinkExpr i2]) IntT
           TrueTE -> VectorTE ([shrinkExpr i1]++[shrinkExpr i2]) BoolT
           FalseTE -> VectorTE ([shrinkExpr i1]++[shrinkExpr i2]) BoolT
 
   CdrTE t -> case t of
-    VectorTE args ty ->
-      let end = last args
-          ln = (length args) - 1
-      in VectorRefTE (shrinkExpr end) ln ty
-    _ ->  error $ "No"
+    VectorTE args ty -> shrinkExpr (last args)
+      -- let end = last args
+      --     ln = (length args) - 1
+      -- in VectorRefTE (shrinkExpr end) ln ty
+      -- in end
+    _ ->  shrinkExpr t
+
   CarTE h -> case h of
-    VectorTE args ty ->
-      let hD = head args
-      in VectorRefTE (shrinkExpr hD) 0 ty
-    _ -> error $ "No"
+    VectorTE args ty -> shrinkExpr (head args)
+--      in VectorRefTE (shrinkExpr hD) 0 ty
+    _ -> shrinkExpr h
   NilTE ty ->
     let blk = []
     in VectorTE blk ty
