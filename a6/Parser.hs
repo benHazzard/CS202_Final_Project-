@@ -21,10 +21,11 @@ langDef = Tok.LanguageDef
   , Tok.opStart         = oneOf ":!#$%&*+./<=>?@\\^|-~"
   , Tok.opLetter        = oneOf ":!#$%&*+./<=>?@\\^|-~"
   , Tok.reservedNames   = ["let", "in", "if", "then", "else", "True", "False", "def",
-                           "Integer", "Boolean", "Vector", "Void"]
+                           "Integer", "Boolean", "Vector", "Void",
+                           "lambda", "nil", "List"]
   , Tok.reservedOpNames = ["+", "=", "==", ">=", ">", "<=", "<",
                            "||", "&&", "not", "->",
-                           "vector", "vectorRef", "vectorSet", "void"]
+                           "vector", "vectorRef", "vectorSet", "void", "car", "cdr", "cons"]
   , Tok.caseSensitive   = True
   }
 
@@ -64,22 +65,22 @@ reservedOp = Tok.reservedOp lexer
 intLit :: Parser Int
 intLit = Tok.integer lexer >>= return . fromIntegral
 
-intExpr :: Parser R4Expr
+intExpr :: Parser R5Expr
 intExpr = intLit >>= return . IntE
 
 identifier :: Parser String
 identifier = Tok.identifier lexer
 
-var :: Parser R4Expr
+var :: Parser R5Expr
 var = identifier >>= return . VarE
 
-funCallExpr :: Parser (R4Expr -> R4Expr)
+funCallExpr :: Parser (R5Expr -> R5Expr)
 funCallExpr = do
   args <- parens $ commaSep expr
   return (\f -> FunCallE f args)
 
 -- Operator table
-table :: Ex.OperatorTable String () Identity R4Expr
+table :: Ex.OperatorTable String () Identity R5Expr
 table   = [ [ Ex.Postfix funCallExpr ]
           , [ prefixOp "not" NotE ]
           , [ infixOp "+" (PlusE) Ex.AssocLeft ]
@@ -97,10 +98,10 @@ table   = [ [ Ex.Postfix funCallExpr ]
 prefixOp name fun = Ex.Prefix (do{ reservedOp name; return fun })
 infixOp name fun assoc = Ex.Infix (do{ reservedOp name; return fun }) assoc
 
-expr :: Parser R4Expr
+expr :: Parser R5Expr
 expr = Ex.buildExpressionParser table factor
 
-letExpr :: Parser R4Expr
+letExpr :: Parser R5Expr
 letExpr = do
   reserved "let"
   x <- identifier
@@ -110,7 +111,7 @@ letExpr = do
   e2 <- expr
   return $ LetE x e1 e2
 
-ifExpr :: Parser R4Expr
+ifExpr :: Parser R5Expr
 ifExpr = do
   reserved "if"
   e1 <- expr
@@ -120,20 +121,20 @@ ifExpr = do
   e3 <- expr
   return $ IfE e1 e2 e3
 
-trueExpr :: Parser R4Expr
+trueExpr :: Parser R5Expr
 trueExpr = do
   reserved "True"
   return TrueE
 
-falseExpr :: Parser R4Expr
+falseExpr :: Parser R5Expr
 falseExpr = do
   reserved "False"
   return FalseE
 
-voidExpr :: Parser R4Expr
+voidExpr :: Parser R5Expr
 voidExpr = reservedOp "void" >> return VoidE
 
-vectorSetExpr :: Parser R4Expr
+vectorSetExpr :: Parser R5Expr
 vectorSetExpr = do
   reservedOp "vectorSet"
   (e1, idx, e2) <- parens (do
@@ -146,7 +147,7 @@ vectorSetExpr = do
                              )
   return $ VectorSetE e1 idx e2
 
-vectorRefExpr :: Parser R4Expr
+vectorRefExpr :: Parser R5Expr
 vectorRefExpr = do
   reservedOp "vectorRef"
   (e1, idx) <- parens (do
@@ -157,16 +158,57 @@ vectorRefExpr = do
                          )
   return $ VectorRefE e1 idx
 
-vectorExpr :: Parser R4Expr
+vectorExpr :: Parser R5Expr
 vectorExpr = do
   reservedOp "vector"
   args <- parens $ commaSep expr
   return $ VectorE args
 
-factor :: Parser R4Expr
+lambdaExpr :: Parser R5Expr
+lambdaExpr = do
+  reserved "lambda"
+  args <- parens $ commaSep typedArg
+  reservedOp "->"
+  body <- expr
+  return $ LambdaE args body
+
+
+carExpr :: Parser R5Expr
+carExpr = do
+  reservedOp "car"
+  a <- parens expr
+  return $ CarE a
+
+cdrExpr :: Parser R5Expr
+cdrExpr = do
+  reservedOp "cdr"
+  a <- parens expr
+  return $ CdrE a
+
+consExpr :: Parser R5Expr
+consExpr = do
+  reservedOp "cons"
+  (a1, a2) <- parens $ do
+    a1 <- expr
+    comma
+    a2 <- expr
+    return (a1, a2)
+  return $ ConsE a1 a2
+
+nilExpr :: Parser R5Expr
+nilExpr = do
+  reserved "nil"
+  t <- parens pType
+  return $ NilE t
+
+factor :: Parser R5Expr
 factor =
       intExpr
   <|> voidExpr
+  <|> nilExpr
+  <|> carExpr
+  <|> cdrExpr
+  <|> consExpr
   <|> vectorSetExpr
   <|> vectorRefExpr
   <|> vectorExpr
@@ -174,6 +216,7 @@ factor =
   <|> falseExpr
   <|> voidExpr
   <|> try ifExpr
+  <|> try lambdaExpr
   <|> var
   <|> letExpr
   <|> parens expr
@@ -190,6 +233,7 @@ pType = (reserved "Integer" >> return IntT)
     <|> (reserved "Boolean" >> return BoolT)
     <|> (reserved "Void" >> return VoidT)
     <|> try pVectorType
+    <|> try pListType
     <|> pFunType
 
 pFunType :: Parser Type
@@ -206,7 +250,13 @@ pVectorType = do
   argTypes <- parens $ commaSep pType
   return $ VectorT argTypes
 
-def :: Parser R4Definition
+pListType :: Parser Type
+pListType = do
+  reserved "List"
+  argType <- parens $ pType
+  return $ ListT argType
+
+def :: Parser R5Definition
 def = do
   reserved "def"
   name <- identifier
@@ -225,20 +275,20 @@ contents p = do
   eof
   return r
 
-parseExpr :: String -> Either ParseError R4Expr
+parseExpr :: String -> Either ParseError R5Expr
 parseExpr s = parse (contents expr) "<stdin>" s
 
-parseProgram :: String -> Either ParseError R4Program
+parseProgram :: String -> Either ParseError R5Program
 parseProgram s = parse (contents program) "<stdin>" s
 
-program :: Parser R4Program
+program :: Parser R5Program
 program = do
   defs <- many $ def
   e <- expr
   return (defs, e)
 
 
-parseFile :: String -> IO R4Program
+parseFile :: String -> IO R5Program
 parseFile fileName = do
   s <- readFile fileName
   case parseProgram s of
