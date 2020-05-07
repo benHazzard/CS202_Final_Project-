@@ -10,6 +10,6 @@ in vectorRef(vectorRef(ls, 1), 0)
 These features that we implemented include appending items together which is outlined in the implementation of the con function. We were also able to provide functionality for returning both the head item implemented as car and the tail items of the list, the cdr function. All of these abilities allow our linked list to be constructed from the ListT type in the R4 language. All of these functionalities can be expressed in terms of the ListT type which are in the end called as functions in the x86 code. 
 
 
-The features that we planned for but were unable to complete and properly implement 
+We planned to implement our functions more, but because of many outside constrainsts, we were unable to finish full implemenation. If we had more time and the semester had been differently, we coould have finished everything. 
 
 
