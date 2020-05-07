@@ -1,0 +1,2 @@
+let ls = cons(cons(6, cons(nil(Integer), nil(Integer))))
+in cdr(car(ls))

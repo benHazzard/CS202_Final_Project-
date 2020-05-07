@@ -1,0 +1,2 @@
+let ls = cons((cons False, nil(Bool)), cons (True, nil(Bool)))
+in cdr(car(ls))

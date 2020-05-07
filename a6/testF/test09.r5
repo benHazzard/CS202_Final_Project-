@@ -1,0 +1,2 @@
+let ls = cons((cons False, nil(Bool)), cons(True, cons(True, cons(nil(Bool), nil(Bool)))))
+in cdr(cdr(ls))
